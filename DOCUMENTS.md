@@ -1,7 +1,7 @@
 # カメラプレビューアプリ仕様書
 
 ## 概要
-このアプリは、Android端末の内蔵カメラを使用してリアルタイムで映像をプレビューする機能を提供します。ユーザーはカメラの切り替えやズーム調整を行いながら、フルスクリーンでカメラ映像を確認できます。
+このアプリは、Android端末の内蔵カメラを使用してリアルタイムで映像をプレビューする機能を提供します。ユーザーはカメラの切り替えやズーム調整を行いながら、フルスクリーンでカメラ映像を確認できます。さらに、外部ディスプレイが接続されている場合は、端末画面と外部ディスプレイの両方に同時にカメラ映像を表示することができます。
 
 ## 動作環境
 - **最小SDK**: Android 12 (API レベル 31)
@@ -30,6 +30,13 @@
   - 背面カメラ（Back Camera）
   - 前面カメラ（Front Camera）
 - カメラ切り替え時は自動的にプレビューを再初期化
+
+### 4. 外部ディスプレイ対応
+- 外部ディスプレイの自動検出
+- 接続時に端末画面と外部ディスプレイの両方にカメラ映像を同時表示
+- 外部ディスプレイでもフルスクリーン表示
+- ディスプレイの接続/切断を自動検知して表示を更新
+- ステータス表示で外部ディスプレイの接続状態を確認可能
 
 ## 技術仕様
 
@@ -63,18 +70,26 @@
 
 #### 主要コンポーネント
 - **MainActivity**: アプリのエントリーポイント、権限管理を担当
-- **CameraScreen**: メイン画面のComposable、カメラ制御のロジックを含む
+- **SimplifiedMultiDisplayCameraScreen**: 外部ディスプレイ対応のメインカメラ画面（現在使用中）
+- **SimpleCameraPresentation**: 外部ディスプレイ用のPresentation実装（回転制御付き）
+- **CameraScreen**: 基本的なカメラ画面の実装
 - **CameraPreview**: カメラプレビューの表示を担当するComposable
 - **CameraSelectorDropdown**: カメラ選択UIコンポーネント
 - **ZoomSlider**: ズーム調整UIコンポーネント
 - **CameraPermissionScreen**: カメラ権限の要求と状態管理
+- **ExternalDisplayManager**: 外部ディスプレイの検出と管理（参照実装）
 
 #### ファイル構成
 ```
 app/src/main/java/app/mat2uken/android/app/clearoutcamerapreview/
-├── MainActivity.kt              # メインアクティビティ
-├── CameraScreen.kt             # カメラ画面の実装
-└── ui/theme/                   # テーマ関連
+├── MainActivity.kt                          # メインアクティビティ
+├── SimplifiedMultiDisplayCameraScreen.kt    # 外部ディスプレイ対応カメラ画面（現在使用中）
+├── CameraScreen.kt                         # 基本的なカメラ画面の実装
+├── MultiDisplayCameraScreen.kt             # 外部ディスプレイ対応（旧バージョン）
+├── RobustMultiDisplayCameraScreen.kt       # エラー処理強化版（旧バージョン）
+├── CameraScreenWithExternalDisplay.kt      # 外部ディスプレイ対応（初期バージョン）
+├── ExternalDisplayManager.kt               # 外部ディスプレイ管理
+└── ui/theme/                               # テーマ関連
     ├── Color.kt
     ├── Theme.kt
     └── Type.kt
@@ -85,8 +100,14 @@ app/src/main/java/app/mat2uken/android/app/clearoutcamerapreview/
 ### 画面レイアウト
 1. **背景**: カメラプレビュー（フルスクリーン）
 2. **オーバーレイUI**（画面下部）:
+   - 外部ディスプレイ接続ステータス表示
    - カメラ選択ドロップダウン
    - ズームスライダー（半透明カード内）
+
+### 外部ディスプレイ表示
+- 外部ディスプレイ接続時は自動的にフルスクリーン表示
+- 端末画面と同じカメラ映像を同時表示
+- ズームやカメラ切り替えは端末側で操作し、外部ディスプレイに反映
 
 ### 権限処理
 - 初回起動時にカメラ権限をリクエスト
@@ -189,6 +210,54 @@ adb shell am start -n app.mat2uken.android.app.clearoutcamerapreview/.MainActivi
 - 権限が拒否された場合の適切なメッセージ表示
 - 権限状態の監視と自動更新
 
+### 外部ディスプレイ機能
+- DisplayManagerを使用した外部ディスプレイの検出
+- Presentationクラスによる外部ディスプレイへの表示
+- 自動的な接続/切断の検知（ホットプラグ対応）
+- 端末と外部ディスプレイへの同時プレビュー表示
+- 外部ディスプレイでのフルスクリーン表示
+- 接続状態のリアルタイム表示（接続時は"LIVE"バッジ表示）
+
+#### 解像度選択機能
+- カメラハードウェアから利用可能な解像度を取得
+- 1920x1080（Full HD）を優先的に選択
+- Full HDが利用できない場合は16:9に最も近いアスペクト比を選択
+- 選択された解像度と実際のプレビュー解像度をUIに表示
+
+#### 回転制御とアスペクト比維持
+- 外部ディスプレイの向き（縦/横）を自動検出
+- カメラプレビューの回転処理:
+  - CameraXレベル: `setTargetRotation(Surface.ROTATION_90)`
+  - PreviewViewレベル: 180度回転
+  - 合計270度の回転補正で正しい向きを実現
+- 16:9のアスペクト比を常に維持
+- 必要に応じてレターボックス（黒帯）を追加
+- 映像のクロップや歪みを防止
+
+## 実装の進化と課題解決
+
+### 開発の反復
+1. **初期実装** (`CameraScreenWithExternalDisplay.kt`)
+   - 基本的な外部ディスプレイサポート
+   - 切断時のクラッシュ問題あり
+
+2. **堅牢版** (`RobustMultiDisplayCameraScreen.kt`)
+   - エラーハンドリングの追加
+   - プレビュー表示の問題が発生
+
+3. **簡略版** (`SimplifiedMultiDisplayCameraScreen.kt`)
+   - PreviewViewの直接管理
+   - 適切なライフサイクル処理
+   - 回転とアスペクト比の問題を解決
+
+### 解決した主な課題
+- カメラプレビューがどちらのディスプレイにも表示されない問題
+- 外部ディスプレイでのクロップ/ズーム表示の問題
+- 270度回転して表示される問題
+- アスペクト比の歪み（縦長/横長に変形）
+- ディスプレイ切断時のクラッシュ
+- ホットプラグ対応（実行時の接続/切断）
+
 ## 今後の拡張可能性
 - 写真撮影機能
 - 動画録画機能
@@ -198,3 +267,5 @@ adb shell am start -n app.mat2uken.android.app.clearoutcamerapreview/.MainActivi
 - フォーカス制御
 - 画像処理フィルター
 - QRコード/バーコード読み取り
+- 複数の外部ディスプレイ対応
+- ディスプレイごとの異なるズーム設定

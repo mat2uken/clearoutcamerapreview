@@ -37,10 +37,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 内蔵カメラの映像をプレビューするアプリです。
 アプリを起動すると、カメラを初期化し、カメラからキャプチャした映像をアプリ画面にフルスクリーンでプレビューすることができます。
-また、以下の2つのカメラ関連の機能を追加で備えます。
-- ズーム率の変更
-  - それぞれのハードウェアが備える範囲をハードウェアから拡大、縮小ができる最小値と最大値を取得し、それを変更できるスライダー
-- カメラの種別（背面カメラ、前面カメラなど）もしくはレンズの切り替えが可能になるプルダウンメニュー
+
+また、以下の機能を備えます。
+- カメラ機能
+  - ズーム率の変更
+    - それぞれのハードウェアが備える範囲をハードウェアから拡大、縮小ができる最小値と最大値を取得し、それを変更できるスライダー
+  - カメラの種別（背面カメラ、前面カメラなど）もしくはレンズの切り替えが可能になるプルダウンメニュー
+- 映像出力機能
+  - カメラ映像のプレビュー 
+    - アプリ内にフルスクリーンでプレビュー
+    - 外部ディスプレイが接続されている場合は、そちらに対してもフルスクリーンで表示
+      - 外部ディスプレイが接続されプレビューを表示しているときも同様の内容をアプリ内の端末の画面にもフルスクリーンのプレビューは同時に表示される
+- 外部ディスプレイの検出機能
 
 ## Architecture Overview
 
@@ -63,11 +71,12 @@ This is an Android application built with Kotlin and Jetpack Compose. The projec
 - Dependencies are managed via version catalog in `gradle/libs.versions.toml`
 
 ### Key Components
-1. **CameraScreen**: Main composable that orchestrates camera functionality
-2. **CameraPreview**: Handles camera lifecycle and preview display
+1. **SimplifiedMultiDisplayCameraScreen**: Main composable that handles camera functionality with external display support
+2. **SimpleCameraPresentation**: Android Presentation class for showing camera preview on external displays
 3. **CameraSelectorDropdown**: UI for switching between front/back cameras
 4. **ZoomSlider**: Controls for adjusting zoom level
 5. **CameraPermissionScreen**: Manages camera permission requests
+6. **ExternalDisplayManager**: Manages external display detection and state (not currently used in active implementation)
 
 ### Testing
 - Unit tests are located in `app/src/test/`
@@ -81,3 +90,20 @@ This is an Android application built with Kotlin and Jetpack Compose. The projec
 - Compose compiler extension version is 1.5.1
 - CameraX requires camera permission handling before initialization
 - Zoom ranges are device-specific and obtained from camera hardware
+
+### External Display Support
+- **Display Detection**: Uses DisplayManager to detect external display connections/disconnections
+- **Dual Preview**: Shows camera preview simultaneously on both device screen and external display
+- **Resolution Selection**: Prioritizes 1920x1080 resolution, falls back to closest 16:9 aspect ratio
+- **Rotation Handling**: Applies appropriate rotation for portrait/landscape displays
+  - CameraX `setTargetRotation(ROTATION_90)` + PreviewView 180° rotation = correct orientation
+- **Aspect Ratio**: Maintains 16:9 aspect ratio with letterboxing as needed
+- **Hot-plug Support**: Handles runtime display connection/disconnection without crashes
+
+### Test Device
+- Device IP: 192.168.0.238:5555
+- ADB commands:
+  ```bash
+  ~/Library/Android/sdk/platform-tools/adb -s 192.168.0.238:5555 install -r app/build/outputs/apk/debug/app-debug.apk
+  ~/Library/Android/sdk/platform-tools/adb -s 192.168.0.238:5555 shell am start -n app.mat2uken.android.app.clearoutcamerapreview/.MainActivity
+  ```

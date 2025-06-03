@@ -46,7 +46,7 @@ fun CameraPermissionScreen() {
     )
 
     if (cameraPermissionState.status.isGranted) {
-        CameraScreen()
+        SimplifiedMultiDisplayCameraScreen()
     } else {
         Box(
             modifier = Modifier.fillMaxSize(),
