@@ -56,6 +56,7 @@ private fun selectOptimalResolution(availableSizes: List<Size>): Size? {
 /**
  * Gets supported camera preview sizes
  */
+@androidx.camera.camera2.interop.ExperimentalCamera2Interop
 private fun getSupportedPreviewSizes(
     context: Context,
     cameraProvider: ProcessCameraProvider,
@@ -86,6 +87,7 @@ private fun getSupportedPreviewSizes(
     }
 }
 
+@androidx.camera.camera2.interop.ExperimentalCamera2Interop
 @Composable
 fun SimplifiedMultiDisplayCameraScreen() {
     val context = LocalContext.current
