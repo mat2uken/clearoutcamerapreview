@@ -53,6 +53,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 外部ディスプレイの検出機能
 - 横向き固定表示（landscape orientation）
 - オーバーレイサイドバーUI（タップで表示/非表示切り替え）
+- オーディオ機能
+  - 外部スピーカー接続時に自動的にマイク録音開始
+  - マイクからスピーカーへのオーディオパススルー
+  - リアルタイムオーディオデバイス監視
+  - オーディオ設定
+    - サンプルレート優先度: 48kHz > 44.1kHz > 最高利用可能
+    - 16ビット深度 (PCM)
+    - ステレオ対応（デバイスがサポートする場合、それ以外はモノラル）
+    - 内部スピーカーのみの場合は自動ミュート
+  - UI表示
+    - マイクデバイス名とオーディオフォーマット表示
+    - 出力デバイス情報表示
+    - ミュート切り替えコントロール
+    - 出力デバイス選択機能（クリックして選択可能）
 
 ## Architecture Overview
 
@@ -62,6 +76,7 @@ This is an Android application built with Kotlin and Jetpack Compose. The projec
 - **Language**: Kotlin 1.9.0
 - **UI Framework**: Jetpack Compose (Material 3)
 - **Camera Library**: CameraX 1.3.4
+- **Audio APIs**: AudioRecord, AudioTrack, AudioManager
 - **Permission Management**: Accompanist Permissions 0.32.0
 - **Min SDK**: 31 (Android 12)
 - **Target SDK**: 35 (Android 15)
@@ -79,6 +94,11 @@ app/src/main/java/.../clearoutcamerapreview/
 │   ├── CameraUtils.kt                # Camera utilities (resolution, zoom, etc.)
 │   ├── DisplayUtils.kt               # External display detection
 │   └── PresentationHelper.kt         # External display preview calculations
+├── audio/
+│   ├── AudioDeviceMonitor.kt         # Audio device detection and monitoring
+│   ├── AudioCaptureManager.kt        # Microphone capture and playback
+│   ├── AudioCoordinator.kt           # Coordinates audio based on device state
+│   └── AudioConfigurationHelper.kt   # Optimal audio configuration detection
 ├── model/
 │   └── Size.kt                       # Custom Size class for testing
 └── ui/theme/                         # Compose theming components
@@ -100,24 +120,54 @@ app/src/main/java/.../clearoutcamerapreview/
    - Zoom levels and bounds
    - External display connection status
    
-4. **UI Components**:
+4. **Audio Components**:
+   - **AudioDeviceMonitor**: Monitors audio device connections in real-time
+     - Tracks available output devices
+     - Detects external vs internal audio devices
+     - Provides device display names
+   - **AudioCaptureManager**: Handles microphone capture and speaker playback
+     - Supports device selection via preferredDevice API
+     - Manual and automatic mute control
+     - Real-time audio routing
+   - **AudioCoordinator**: Coordinates audio based on external speaker detection
+     - Manages overall audio state
+     - Exposes available devices for UI selection
+   - **AudioConfigurationHelper**: Determines optimal audio settings
+     - Sample rate priority: 48kHz > 44.1kHz > highest available
+     - Channel configuration (stereo/mono) based on device support
+     - 16-bit PCM encoding
+   - Features:
+     - Automatic start/stop based on external audio device presence
+     - Dynamic sample rate selection based on hardware capabilities
+     - Low-latency audio passthrough
+     - Visual indicators in UI
+     - Output device selection with real-time switching
+
+5. **UI Components**:
    - **SidebarSection**: Table-like section headers in sidebar
    - **StatusRow**: Read-only status display rows
    - **ClickableRow**: Interactive rows that open dialogs
+   - **MuteControlRow**: Audio mute toggle with status
    - **CameraSelectionDialog**: Modal for camera switching
    - **ZoomControlDialog**: Modal for zoom adjustment
    - **FlipControlDialog**: Modal for flip controls
+   - **AudioOutputSelectionDialog**: Modal for audio output device selection
 
 ### Testing
 - Unit tests are located in `app/src/test/`
-- 75+ unit tests covering all utility classes and helpers
+- 85+ unit tests covering all utility classes and helpers
 - Test coverage approaches 100% for non-UI components
 - Test files:
   - `CameraUtilsTest.kt`: Camera utility functions
   - `DisplayUtilsTest.kt`: Display detection logic
   - `CameraStateTest.kt`: State management
   - `PresentationHelperTest.kt`: External display calculations
-- Use JUnit 4 and MockK for mocking
+  - `AudioDeviceMonitorTest.kt`: Audio device detection
+  - `AudioCaptureManagerTest.kt`: Audio capture logic
+  - `AudioCoordinatorTest.kt`: Audio coordination
+  - `AudioConfigurationHelperTest.kt`: Audio configuration selection
+  - `AudioDeviceSelectionTest.kt`: Audio output device selection
+- Use JUnit 4, MockK, and Robolectric for testing
 
 ### Development Notes
 - The project uses Gradle wrapper (`./gradlew`) for consistent builds
@@ -153,6 +203,10 @@ app/src/main/java/.../clearoutcamerapreview/
 4. **Flip Controls**: Added manual V/H flip for external display
 5. **UI Overhaul**: Sidebar converted to overlay with modal dialogs
 6. **State Management**: Immutable state pattern for camera configuration
+7. **Audio Passthrough**: Added automatic audio capture/playback for external speakers
+8. **Audio Configuration**: Dynamic sample rate selection (48kHz > 44.1kHz > highest)
+9. **Audio UI Controls**: Added mute toggle and device information display
+10. **Audio Output Selection**: Added dialog for manual audio output device selection
 
 ### Test Device
 - Device IP: 192.168.0.238:5555

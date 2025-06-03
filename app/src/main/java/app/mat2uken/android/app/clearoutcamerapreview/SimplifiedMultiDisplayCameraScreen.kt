@@ -25,7 +25,13 @@ import app.mat2uken.android.app.clearoutcamerapreview.camera.CameraState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
+import android.media.AudioDeviceInfo
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +54,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import app.mat2uken.android.app.clearoutcamerapreview.audio.AudioCoordinator
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 
 private const val TAG = "SimplifiedMultiDisplay"
 
@@ -133,7 +142,7 @@ private fun getSupportedPreviewSizes(
 
 @androidx.camera.camera2.interop.ExperimentalCamera2Interop
 @Composable
-fun SimplifiedMultiDisplayCameraScreen() {
+fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = null) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
@@ -162,9 +171,13 @@ fun SimplifiedMultiDisplayCameraScreen() {
     var showCameraDialog by remember { mutableStateOf(false) }
     var showZoomDialog by remember { mutableStateOf(false) }
     var showFlipDialog by remember { mutableStateOf(false) }
+    var showAudioOutputDialog by remember { mutableStateOf(false) }
     
     // Sidebar visibility state
     var showSidebar by remember { mutableStateOf(true) }
+    
+    // Audio state
+    val audioState by audioCoordinator?.audioState?.collectAsState() ?: remember { mutableStateOf(null) }
     
     // Create a single preview view for the main display with proper aspect ratio
     val mainPreviewView = remember { 
@@ -469,17 +482,34 @@ fun SimplifiedMultiDisplayCameraScreen() {
                 .clickable { showSidebar = !showSidebar }
         )
         
-        // Menu icon to indicate sidebar toggle
+        // Top icons when sidebar is hidden
         if (!showSidebar) {
-            Icon(
-                imageVector = Icons.Default.Menu,
-                contentDescription = "Toggle sidebar",
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .size(32.dp),
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Audio indicator
+                audioState?.let { state ->
+                    if (state.isCapturing) {
+                        Icon(
+                            imageVector = if (state.isMuted) Icons.Default.MicOff else Icons.Default.Mic,
+                            contentDescription = if (state.isMuted) "Audio muted" else "Audio recording active",
+                            modifier = Modifier.size(24.dp),
+                            tint = if (state.isMuted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+                
+                // Menu icon
+                Icon(
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "Toggle sidebar",
+                    modifier = Modifier.size(32.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
         }
         
         // Sidebar overlay
@@ -528,6 +558,72 @@ fun SimplifiedMultiDisplayCameraScreen() {
                         showBadge = cameraState.isExternalDisplayConnected,
                         badgeText = "LIVE"
                     )
+                }
+                
+                // Audio Status Section
+                audioState?.let { state ->
+                    SidebarSection(title = "Audio Status") {
+                        StatusRow(
+                            label = "External Audio",
+                            value = if (state.hasExternalOutput) "Connected" else "Not Connected",
+                            valueColor = if (state.hasExternalOutput) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (state.hasExternalOutput) {
+                            StatusRow(
+                                label = "Status",
+                                value = if (state.isCapturing) "Active" else "Inactive",
+                                valueColor = if (state.isCapturing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                showBadge = state.isCapturing && !state.isMuted,
+                                badgeText = "REC"
+                            )
+                        }
+                        state.error?.let { error ->
+                            StatusRow(
+                                label = "Error",
+                                value = error,
+                                valueColor = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                    
+                    // Microphone Information Section
+                    if (state.isCapturing) {
+                        SidebarSection(title = "Microphone") {
+                            StatusRow(
+                                label = "Device",
+                                value = state.microphoneName
+                            )
+                            StatusRow(
+                                label = "Format",
+                                value = "${state.sampleRate / 1000}kHz, " +
+                                        "${if (state.channelCount == 2) "Stereo" else "Mono"}, " +
+                                        "16-bit PCM"
+                            )
+                        }
+                        
+                        // Audio Output Section
+                        SidebarSection(title = "Audio Output") {
+                            ClickableRow(
+                                label = "Device",
+                                value = state.outputDeviceName,
+                                onClick = { showAudioOutputDialog = true }
+                            )
+                            if (state.hasExternalOutput) {
+                                MuteControlRow(
+                                    label = "Output",
+                                    isMuted = state.isMuted,
+                                    isManuallyMuted = state.isManuallyMuted,
+                                    onClick = { audioCoordinator?.toggleMute() }
+                                )
+                            } else {
+                                StatusRow(
+                                    label = "Output",
+                                    value = "Disabled (No External Audio)",
+                                    valueColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
                 
                 // Camera Information Section
@@ -636,6 +732,25 @@ fun SimplifiedMultiDisplayCameraScreen() {
             },
             onDismiss = { showFlipDialog = false }
         )
+    }
+    
+    // Audio Output Selection Dialog
+    if (showAudioOutputDialog) {
+        audioCoordinator?.let { coordinator ->
+            val availableDevices by coordinator.getAvailableOutputDevices().collectAsState()
+            val currentDeviceName = audioState?.outputDeviceName ?: "Unknown"
+            
+            AudioOutputSelectionDialog(
+                availableDevices = availableDevices,
+                currentDeviceName = currentDeviceName,
+                onDeviceSelected = { device ->
+                    coordinator.setOutputDevice(device)
+                    showAudioOutputDialog = false
+                },
+                onDismiss = { showAudioOutputDialog = false },
+                getDeviceName = { device -> coordinator.getDeviceDisplayName(device) }
+            )
+        }
     }
 }
 
@@ -934,7 +1049,8 @@ private fun StatusRow(
 private fun ClickableRow(
     label: String,
     value: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    valueColor: Color = MaterialTheme.colorScheme.primary
 ) {
     Surface(
         modifier = Modifier
@@ -961,14 +1077,72 @@ private fun ClickableRow(
                     text = value,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = valueColor
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Icon(
                     imageVector = Icons.Default.Info,
                     contentDescription = "Edit",
                     modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = valueColor
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MuteControlRow(
+    label: String,
+    isMuted: Boolean,
+    isManuallyMuted: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        color = Color.Transparent
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isMuted) {
+                        if (isManuallyMuted) "Muted" else "Muted (No Ext. Audio)"
+                    } else {
+                        "Active"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isMuted) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    }
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                    contentDescription = if (isMuted) "Unmute" else "Mute",
+                    modifier = Modifier.size(20.dp),
+                    tint = if (isMuted) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    }
                 )
             }
         }
@@ -1203,5 +1377,83 @@ private fun SwitchOption(
             checked = checked,
             onCheckedChange = onCheckedChange
         )
+    }
+}
+
+@Composable
+private fun AudioOutputSelectionDialog(
+    availableDevices: List<AudioDeviceInfo>,
+    currentDeviceName: String,
+    onDeviceSelected: (AudioDeviceInfo?) -> Unit,
+    onDismiss: () -> Unit,
+    getDeviceName: (AudioDeviceInfo) -> String
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Select Audio Output",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                if (availableDevices.isEmpty()) {
+                    Text(
+                        text = "No audio output devices available",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
+                } else {
+                    availableDevices.forEach { device ->
+                        val deviceName = getDeviceName(device)
+                        val isSelected = deviceName == currentDeviceName
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onDeviceSelected(device) }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = { onDeviceSelected(device) }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = deviceName,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
     }
 }

@@ -50,6 +50,20 @@ This application provides real-time camera preview functionality using Android d
 - すべての設定をモーダルダイアログで操作
 - メニューアイコンでサイドバーの存在を示唆
 
+### 6. オーディオパススルー機能 / Audio Passthrough
+- 外部スピーカー接続時に自動的にマイク録音を開始
+- マイクからの音声を外部スピーカーへリアルタイム出力
+- オーディオ設定:
+  - サンプルレート優先度: 48kHz > 44.1kHz > 最高利用可能
+  - 16ビット深度 (PCM)
+  - ステレオ対応（デバイスがサポートする場合、それ以外はモノラル）
+  - 内部スピーカーのみの場合は自動ミュート
+- UI表示機能:
+  - マイクデバイス名とオーディオフォーマット表示
+  - 出力デバイス情報表示
+  - ミュート切り替えコントロール（手動/自動）
+  - 出力デバイス選択ダイアログ（利用可能なデバイスから選択）
+
 ## 技術仕様 / Technical Specifications
 
 ### 依存ライブラリ / Dependencies
@@ -74,6 +88,8 @@ This application provides real-time camera preview functionality using Android d
 ### 必要な権限 / Required Permissions
 ```xml
 <uses-permission android:name="android.permission.CAMERA" />
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 <uses-feature android:name="android.hardware.camera" android:required="true" />
 <uses-feature android:name="android.hardware.camera.autofocus" />
 ```
@@ -106,6 +122,11 @@ app/src/main/java/app/mat2uken/android/app/clearoutcamerapreview/
 │   ├── CameraUtils.kt                      # カメラユーティリティ
 │   ├── DisplayUtils.kt                     # ディスプレイ検出
 │   └── PresentationHelper.kt               # 外部表示計算
+├── audio/
+│   ├── AudioDeviceMonitor.kt               # オーディオデバイス監視
+│   ├── AudioCaptureManager.kt              # 録音・再生管理
+│   ├── AudioCoordinator.kt                 # オーディオ統合制御
+│   └── AudioConfigurationHelper.kt         # 最適オーディオ設定検出
 ├── model/
 │   └── Size.kt                             # テスト用Sizeクラス
 └── ui/theme/                               # テーマ関連
@@ -123,6 +144,9 @@ app/src/main/java/app/mat2uken/android/app/clearoutcamerapreview/
    - スクロール可能なコンテンツ
    - セクション構成:
      - Display Status（接続状態）
+     - Audio Status（外部オーディオ接続、録音状態）
+     - Microphone（デバイス名、フォーマット）
+     - Audio Output（デバイス選択、ミュート制御）
      - Camera Information（解像度、アスペクト比）
      - Camera Controls（カメラ選択、ズーム）
      - External Display（反転制御）
@@ -131,11 +155,13 @@ app/src/main/java/app/mat2uken/android/app/clearoutcamerapreview/
 - **カメラ選択**: ラジオボタンで前面/背面を選択
 - **ズーム調整**: スライダーでズーム倍率を調整
 - **反転制御**: スイッチで上下/左右反転を切り替え
+- **オーディオ出力選択**: 利用可能なデバイスから選択（ラジオボタン）
 
 ### 権限処理 / Permission Handling
-- 初回起動時にカメラ権限をリクエスト
+- 初回起動時にカメラとマイク権限をリクエスト
 - 権限が拒否された場合は説明メッセージを表示
 - 権限が許可されるまでカメラプレビューは表示されない
+- オーディオ機能はマイク権限が必要
 
 ## 実装の詳細 / Implementation Details
 
@@ -173,6 +199,48 @@ private fun applyFlipTransformation() {
 }
 ```
 
+### オーディオ実装 / Audio Implementation
+
+#### デバイス検出 / Device Detection
+外部オーディオデバイスの接続を自動検出:
+```kotlin
+private fun isExternalAudioDevice(device: AudioDeviceInfo): Boolean {
+    return when (device.type) {
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> false
+        
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_HDMI,
+        AudioDeviceInfo.TYPE_USB_DEVICE -> true
+        
+        else -> true // Unknown devices treated as external
+    }
+}
+```
+
+#### オーディオキャプチャ設定 / Audio Capture Configuration
+- サンプルレート優先順位:
+  1. 48kHz（推奨）
+  2. 44.1kHz（標準）
+  3. デバイスがサポートする最高サンプルレート
+- オーディオフォーマット: 16-bit PCM
+- チャンネル: ステレオ（サポートされている場合）、それ以外はモノラル
+- バッファサイズ: 自動計算（最小100ms）
+- 出力デバイス選択: Android API 23以上でpreferredDevice APIを使用
+
+#### リアルタイム処理 / Real-time Processing
+```kotlin
+// メインループ
+while (isActive && state.isCapturing) {
+    val bytesRead = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+    if (bytesRead > 0) {
+        audioTrack?.write(buffer, 0, bytesRead)
+    }
+    yield()
+}
+```
+
 ## テスト / Testing
 
 ### ユニットテスト構成 / Unit Test Structure
@@ -180,8 +248,13 @@ private fun applyFlipTransformation() {
 - **DisplayUtilsTest**: 15テスト（ディスプレイ検出ロジック）
 - **CameraStateTest**: 18テスト（状態管理、イミュータブル更新）
 - **PresentationHelperTest**: 28テスト（外部ディスプレイ計算）
+- **AudioDeviceMonitorTest**: 10テスト（オーディオデバイス検出）
+- **AudioCaptureManagerTest**: 6テスト（録音・再生管理）
+- **AudioCoordinatorTest**: 4テスト（オーディオ統合制御）
+- **AudioConfigurationHelperTest**: 3テスト（オーディオ設定選択）
+- **AudioDeviceSelectionTest**: 4テスト（出力デバイス選択）
 
-合計75以上のユニットテストでビジネスロジックをカバー
+合計100以上のユニットテストでビジネスロジックをカバー
 
 ### テスト実行 / Running Tests
 ```bash
@@ -242,11 +315,21 @@ adb shell am start -n app.mat2uken.android.app.clearoutcamerapreview/.MainActivi
    - 右上のメニューアイコンを確認
    - タッチイベントの伝播を確認
 
+5. **オーディオが機能しない**
+   - マイク権限を確認
+   - 外部スピーカーの接続を確認
+   - AudioManagerイベントをlogcatで監視
+   - オーディオデバイスの種類を確認
+
 ### デバッグ用ログタグ / Debug Log Tags
 - `SimplifiedMultiDisplay`: メインカメラ操作
 - `DisplayUtils`: 外部ディスプレイ検出
 - `CameraUtils`: 解像度選択
 - `Presentation`: 外部ディスプレイレンダリング
+- `AudioDeviceMonitor`: オーディオデバイス検出
+- `AudioCaptureManager`: 録音・再生管理
+- `AudioCoordinator`: オーディオ統合制御
+- `AudioConfigurationHelper`: オーディオ設定選択
 
 ## 今後の拡張可能性 / Future Enhancements
 - 写真撮影機能
@@ -255,3 +338,6 @@ adb shell am start -n app.mat2uken.android.app.clearoutcamerapreview/.MainActivi
 - 設定の永続化
 - カスタムアスペクト比サポート
 - 複数の外部ディスプレイ対応
+- オーディオエフェクト（エコーキャンセル、ノイズ抑制）
+- オーディオ録音機能
+- Bluetooth LEオーディオ対応
