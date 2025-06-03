@@ -24,7 +24,6 @@ import app.mat2uken.android.app.clearoutcamerapreview.model.Size as CustomSize
 import app.mat2uken.android.app.clearoutcamerapreview.camera.CameraState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,9 +44,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.window.Dialog
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 
 private const val TAG = "SimplifiedMultiDisplay"
 
@@ -157,14 +153,6 @@ fun SimplifiedMultiDisplayCameraScreen() {
     val displayManager = remember { context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager }
     var externalDisplay by remember { mutableStateOf<Display?>(null) }
     var externalPresentation by remember { mutableStateOf<SimpleCameraPresentation?>(null) }
-    
-    // Dialog states
-    var showCameraDialog by remember { mutableStateOf(false) }
-    var showZoomDialog by remember { mutableStateOf(false) }
-    var showFlipDialog by remember { mutableStateOf(false) }
-    
-    // Sidebar visibility state
-    var showSidebar by remember { mutableStateOf(true) }
     
     // Create a single preview view for the main display with proper aspect ratio
     val mainPreviewView = remember { 
@@ -460,50 +448,40 @@ fun SimplifiedMultiDisplayCameraScreen() {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Main camera preview (full screen)
-        AndroidView(
-            factory = { mainPreviewView },
+    // Dialog states
+    var showCameraDialog by remember { mutableStateOf(false) }
+    var showZoomDialog by remember { mutableStateOf(false) }
+    var showFlipDialog by remember { mutableStateOf(false) }
+    
+    Row(modifier = Modifier.fillMaxSize()) {
+        // Main camera preview (takes remaining space)
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .clickable { showSidebar = !showSidebar }
-        )
-        
-        // Menu icon to indicate sidebar toggle
-        if (!showSidebar) {
-            Icon(
-                imageVector = Icons.Default.Menu,
-                contentDescription = "Toggle sidebar",
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .size(32.dp),
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                .weight(1f)
+                .fillMaxHeight()
+        ) {
+            AndroidView(
+                factory = { mainPreviewView },
+                modifier = Modifier.fillMaxSize()
             )
         }
         
-        // Sidebar overlay
-        AnimatedVisibility(
-            visible = showSidebar,
-            enter = slideInHorizontally(initialOffsetX = { it }),
-            exit = slideOutHorizontally(targetOffsetX = { it }),
-            modifier = Modifier.align(Alignment.CenterEnd)
+        // Sidebar with scrollable content
+        Card(
+            modifier = Modifier
+                .width(280.dp)
+                .fillMaxHeight(),
+            shape = RoundedCornerShape(0.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
-            Card(
+            Column(
                 modifier = Modifier
-                    .width(280.dp)
-                    .fillMaxHeight(),
-                shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                ) {
                 // Header
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -518,7 +496,7 @@ fun SimplifiedMultiDisplayCameraScreen() {
                 }
                 
                 Divider()
-                
+            
                 // Display Status Section
                 SidebarSection(title = "Display Status") {
                     StatusRow(
@@ -542,8 +520,7 @@ fun SimplifiedMultiDisplayCameraScreen() {
                             value = String.format("%.2f", size.width.toFloat() / size.height)
                         )
                     }
-                }
-                
+            
                 // Camera Controls Section
                 SidebarSection(title = "Camera Controls") {
                     ClickableRow(
@@ -564,7 +541,7 @@ fun SimplifiedMultiDisplayCameraScreen() {
                         )
                     }
                 }
-                
+            
                 // External Display Controls Section
                 if (cameraState.isExternalDisplayConnected) {
                     SidebarSection(title = "External Display") {
@@ -583,7 +560,6 @@ fun SimplifiedMultiDisplayCameraScreen() {
                     }
                 }
             }
-        }
         }
     }
     
@@ -1204,4 +1180,3 @@ private fun SwitchOption(
             onCheckedChange = onCheckedChange
         )
     }
-}

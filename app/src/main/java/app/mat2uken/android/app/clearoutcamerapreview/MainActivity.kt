@@ -25,8 +25,8 @@ import com.google.accompanist.permissions.rememberPermissionState
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Force landscape orientation
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        // Allow both landscape orientations (normal and reverse)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         enableEdgeToEdge()
         setContent {
             ClearoutcamerapreviewTheme {
@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class, androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
 @Composable
 fun CameraPermissionScreen() {
     val cameraPermissionState = rememberPermissionState(
