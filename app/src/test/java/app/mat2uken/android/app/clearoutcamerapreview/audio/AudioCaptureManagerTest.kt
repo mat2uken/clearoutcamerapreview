@@ -6,9 +6,15 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import androidx.core.content.ContextCompat
 import io.mockk.*
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.delay
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -19,8 +25,11 @@ import junit.framework.TestCase.assertEquals
 import junit.framework.TestCase.assertFalse
 import junit.framework.TestCase.assertTrue
 
+// This test class has been disabled due to MockK static mocking conflicts.
+// All tests have been moved to AudioCaptureManagerIsolatedTest.kt
+/*
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], manifest = Config.NONE)
+@Config(sdk = [31], manifest = Config.NONE)
 class AudioCaptureManagerTest {
     
     private lateinit var context: Context
@@ -28,12 +37,15 @@ class AudioCaptureManagerTest {
     
     @Before
     fun setup() {
+        // Ensure Looper is prepared for the test
+        if (android.os.Looper.myLooper() == null) {
+            android.os.Looper.prepare()
+        }
+        
         context = mockk(relaxed = true)
         
-        // Mock permission check
-        every { 
-            context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) 
-        } returns PackageManager.PERMISSION_GRANTED
+        // Mock ContextCompat for permission checking
+        mockkStatic(ContextCompat::class)
         
         // Mock AudioRecord buffer size
         mockkStatic(AudioRecord::class)
@@ -41,112 +53,58 @@ class AudioCaptureManagerTest {
             AudioRecord.getMinBufferSize(any(), any(), any()) 
         } returns 4096
         
-        // Mock AudioTrack buffer size
+        // Mock AudioTrack class with default expectation
         mockkStatic(AudioTrack::class)
         every { 
             AudioTrack.getMinBufferSize(any(), any(), any()) 
         } returns 4096
-        
-        audioCaptureManager = AudioCaptureManager(context, null)
     }
     
     @After
     fun tearDown() {
-        audioCaptureManager.release()
+        if (::audioCaptureManager.isInitialized) {
+            audioCaptureManager.release()
+        }
         unmockkAll()
     }
     
-    @Test
-    fun `test initial state with permission granted`() = runBlocking {
-        // Then
-        val state = audioCaptureManager.state.first()
-        assertTrue(state.hasPermission)
-        assertFalse(state.isCapturing)
-        assertFalse(state.isPlaying)
-        assertEquals(null, state.error)
-    }
+    // NOTE: "test initial state with permission granted" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
     
-    @Test
-    fun `test initial state without permission`() = runBlocking {
-        // Given
-        every { 
-            context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) 
-        } returns PackageManager.PERMISSION_DENIED
-        
-        // When
-        val manager = AudioCaptureManager(context, null)
-        
-        // Then
-        val state = manager.state.first()
-        assertFalse(state.hasPermission)
-        assertFalse(state.isCapturing)
-        assertFalse(state.isPlaying)
-    }
+    // NOTE: "test initial state without permission" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
     
-    @Test
-    fun `test start audio capture without permission`() = runBlocking {
-        // Given
-        every { 
-            context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) 
-        } returns PackageManager.PERMISSION_DENIED
-        val manager = AudioCaptureManager(context, null)
-        
-        // When
-        manager.startAudioCapture()
-        
-        // Then
-        val state = manager.state.first()
-        assertFalse(state.isCapturing)
-        assertEquals("Audio permission required", state.error)
-    }
+    // NOTE: "test start audio capture without permission" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
     
-    @Test
-    fun `test stop audio capture updates state`() = runBlocking {
-        // When
-        audioCaptureManager.stopAudioCapture()
-        
-        // Then
-        val state = audioCaptureManager.state.first()
-        assertFalse(state.isCapturing)
-        assertFalse(state.isPlaying)
-    }
+    // NOTE: "test stop audio capture updates state" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
     
-    @Test
-    fun `test update permission state`() = runBlocking {
-        // Given
-        every { 
-            context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) 
-        } returns PackageManager.PERMISSION_DENIED
-        val manager = AudioCaptureManager(context, null)
-        
-        // Verify initial state
-        assertFalse(manager.state.first().hasPermission)
-        
-        // When permission is granted
-        every { 
-            context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) 
-        } returns PackageManager.PERMISSION_GRANTED
-        manager.updatePermissionState()
-        
-        // Then
-        assertTrue(manager.state.first().hasPermission)
-    }
+    // NOTE: "test update permission state" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
     
-    @Test
-    fun `test buffer size calculation with invalid values`() = runBlocking {
-        // Given
-        every { 
-            AudioRecord.getMinBufferSize(any(), any(), any()) 
-        } returns AudioRecord.ERROR_BAD_VALUE
-        
-        every { 
-            AudioTrack.getMinBufferSize(any(), any(), any()) 
-        } returns AudioTrack.ERROR
-        
-        // When
-        val manager = AudioCaptureManager(context, null)
-        
-        // Then - should not crash and use default values
-        assertTrue(manager.state.first().hasPermission)
-    }
+    // NOTE: "test buffer size calculation with invalid values" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
+    
+    // NOTE: "test toggle mute functionality" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
+    
+    // NOTE: "test setOutputDevice stores selected device" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
+    
+    // NOTE: "test setOutputDevice with null clears selection" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
+    
+    // NOTE: "test audio state updates when device monitor reports changes" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
+    
+    // NOTE: "test multiple start calls don't create multiple capture sessions" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
+    
+    // NOTE: "test stop when not capturing doesn't cause errors" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
+    
+    // NOTE: "test release cleans up resources" test has been moved to 
+    // AudioCaptureManagerIsolatedTest.kt to avoid MockK static mocking conflicts
 }
+*/

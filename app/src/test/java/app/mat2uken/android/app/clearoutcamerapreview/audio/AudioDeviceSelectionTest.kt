@@ -3,6 +3,7 @@ package app.mat2uken.android.app.clearoutcamerapreview.audio
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import io.mockk.*
+import io.mockk.impl.annotations.MockK
 import junit.framework.TestCase.assertEquals
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -11,11 +12,10 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
+@Config(sdk = [31], manifest = Config.NONE)
 class AudioDeviceSelectionTest {
     
     private lateinit var context: android.content.Context
@@ -25,11 +25,19 @@ class AudioDeviceSelectionTest {
     
     @Before
     fun setup() {
-        context = RuntimeEnvironment.getApplication()
+        // Ensure Looper is prepared for the test
+        if (android.os.Looper.myLooper() == null) {
+            android.os.Looper.prepare()
+        }
+        
+        MockKAnnotations.init(this)
+        
+        context = mockk(relaxed = true)
         mockAudioManager = mockk(relaxed = true)
         
         // Mock the AudioManager service
         every { context.getSystemService(android.content.Context.AUDIO_SERVICE) } returns mockAudioManager
+        every { context.checkSelfPermission(any()) } returns android.content.pm.PackageManager.PERMISSION_GRANTED
         
         audioDeviceMonitor = AudioDeviceMonitor(context)
         audioCaptureManager = AudioCaptureManager(context, audioDeviceMonitor)

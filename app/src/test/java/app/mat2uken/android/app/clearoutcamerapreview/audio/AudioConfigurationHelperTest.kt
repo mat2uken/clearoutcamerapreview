@@ -15,7 +15,7 @@ import junit.framework.TestCase.assertEquals
 import junit.framework.TestCase.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], manifest = Config.NONE)
+@Config(sdk = [31], manifest = Config.NONE)
 class AudioConfigurationHelperTest {
     
     private lateinit var context: Context
@@ -23,6 +23,11 @@ class AudioConfigurationHelperTest {
     
     @Before
     fun setup() {
+        // Ensure Looper is prepared for the test
+        if (android.os.Looper.myLooper() == null) {
+            android.os.Looper.prepare()
+        }
+        
         context = mockk(relaxed = true)
         audioManager = mockk(relaxed = true)
         
@@ -141,5 +146,102 @@ class AudioConfigurationHelperTest {
         
         // Then
         assertEquals(AudioFormat.CHANNEL_OUT_MONO, outputConfig)
+    }
+    
+    @Test
+    fun `test output channel config for invalid channel count defaults to mono`() {
+        // When
+        val outputConfig0 = AudioConfigurationHelper.getOutputChannelConfig(0)
+        val outputConfig3 = AudioConfigurationHelper.getOutputChannelConfig(3)
+        val outputConfigNegative = AudioConfigurationHelper.getOutputChannelConfig(-1)
+        
+        // Then - All should default to mono
+        assertEquals(AudioFormat.CHANNEL_OUT_MONO, outputConfig0)
+        assertEquals(AudioFormat.CHANNEL_OUT_MONO, outputConfig3)
+        assertEquals(AudioFormat.CHANNEL_OUT_MONO, outputConfigNegative)
+    }
+    
+    @Test
+    fun `test no supported sample rates falls back to 44100Hz`() {
+        // Given - All common sample rates fail
+        every { audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE) } returns null
+        every { AudioRecord.getMinBufferSize(any(), any(), any()) } returns AudioRecord.ERROR_BAD_VALUE
+        
+        // When
+        val config = AudioConfigurationHelper.getOptimalRecordingConfiguration(context)
+        
+        // Then - Should use 44100Hz as last resort
+        assertEquals(44100, config.sampleRate)
+    }
+    
+    @Test
+    fun `test system suggested sample rate is used when valid`() {
+        // Given - System suggests a non-standard sample rate
+        every { audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE) } returns "96000"
+        every { AudioRecord.getMinBufferSize(96000, any(), any()) } returns 8192
+        every { AudioRecord.getMinBufferSize(48000, any(), any()) } returns 4096
+        
+        // When
+        val config = AudioConfigurationHelper.getOptimalRecordingConfiguration(context)
+        
+        // Then - Should prefer 48kHz over system suggestion
+        assertEquals(48000, config.sampleRate)
+    }
+    
+    @Test
+    fun `test invalid system sample rate property handled gracefully`() {
+        // Given - Invalid sample rate string
+        every { audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE) } returns "invalid"
+        every { AudioRecord.getMinBufferSize(48000, any(), any()) } returns 4096
+        
+        // When
+        val config = AudioConfigurationHelper.getOptimalRecordingConfiguration(context)
+        
+        // Then - Should still work with preferred rates
+        assertEquals(48000, config.sampleRate)
+    }
+    
+    @Test
+    fun `test extremely high sample rate from system is ignored`() {
+        // Given - System suggests unrealistic sample rate
+        every { audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE) } returns "192000"
+        every { AudioRecord.getMinBufferSize(192000, any(), any()) } returns AudioRecord.ERROR_BAD_VALUE
+        every { AudioRecord.getMinBufferSize(48000, any(), any()) } returns 4096
+        
+        // When
+        val config = AudioConfigurationHelper.getOptimalRecordingConfiguration(context)
+        
+        // Then - Should fall back to standard rate
+        assertEquals(48000, config.sampleRate)
+    }
+    
+    @Test
+    fun `test audio manager property returns empty string`() {
+        // Given
+        every { audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE) } returns ""
+        every { AudioRecord.getMinBufferSize(44100, any(), any()) } returns 4096
+        
+        // When
+        val config = AudioConfigurationHelper.getOptimalRecordingConfiguration(context)
+        
+        // Then - Should use standard rates
+        assertTrue(config.sampleRate in listOf(48000, 44100))
+    }
+    
+    @Test
+    fun `test configuration data class properties`() {
+        // Given
+        val config = AudioConfiguration(
+            sampleRate = 48000,
+            channelConfig = AudioFormat.CHANNEL_IN_STEREO,
+            channelCount = 2,
+            encoding = AudioFormat.ENCODING_PCM_16BIT
+        )
+        
+        // Then - Verify all properties are accessible
+        assertEquals(48000, config.sampleRate)
+        assertEquals(AudioFormat.CHANNEL_IN_STEREO, config.channelConfig)
+        assertEquals(2, config.channelCount)
+        assertEquals(AudioFormat.ENCODING_PCM_16BIT, config.encoding)
     }
 }

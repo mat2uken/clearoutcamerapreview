@@ -215,13 +215,19 @@ class AudioDeviceMonitor(private val context: Context) {
      */
     fun getMicrophoneName(device: AudioDeviceInfo?): String {
         return device?.let {
-            when (it.type) {
-                AudioDeviceInfo.TYPE_BUILTIN_MIC -> "Built-in Microphone"
-                AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Headset Microphone"
-                AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth Microphone"
-                AudioDeviceInfo.TYPE_USB_DEVICE -> "USB Microphone"
-                AudioDeviceInfo.TYPE_USB_HEADSET -> "USB Headset Microphone"
-                else -> it.productName.toString().ifEmpty { getDeviceTypeName(it.type) }
+            // If device has a product name, use it
+            if (it.productName.isNotEmpty() && it.productName.toString() != "null") {
+                it.productName.toString()
+            } else {
+                // Otherwise use type-specific names
+                when (it.type) {
+                    AudioDeviceInfo.TYPE_BUILTIN_MIC -> "Built-in Microphone"
+                    AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Headset Microphone"
+                    AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth Microphone"
+                    AudioDeviceInfo.TYPE_USB_DEVICE -> "USB Microphone"
+                    AudioDeviceInfo.TYPE_USB_HEADSET -> "USB Headset Microphone"
+                    else -> getDeviceTypeName(it.type)
+                }
             }
         } ?: "No Microphone"
     }
@@ -231,16 +237,22 @@ class AudioDeviceMonitor(private val context: Context) {
      */
     fun getOutputDeviceName(device: AudioDeviceInfo?): String {
         return device?.let {
-            when (it.type) {
-                AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Built-in Speaker"
-                AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Wired Headset"
-                AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "Wired Headphones"
-                AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "Bluetooth Speaker"
-                AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth Headset"
-                AudioDeviceInfo.TYPE_HDMI -> "HDMI Audio"
-                AudioDeviceInfo.TYPE_USB_DEVICE -> "USB Audio"
-                AudioDeviceInfo.TYPE_USB_HEADSET -> "USB Headset"
-                else -> it.productName.toString().ifEmpty { getDeviceTypeName(it.type) }
+            // If device has a product name, use it
+            if (it.productName.isNotEmpty() && it.productName.toString() != "null") {
+                it.productName.toString()
+            } else {
+                // Otherwise use type-specific names
+                when (it.type) {
+                    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Built-in Speaker"
+                    AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Wired Headset"
+                    AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "Wired Headphones"
+                    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "Bluetooth Speaker"
+                    AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth Headset"
+                    AudioDeviceInfo.TYPE_HDMI -> "HDMI Audio"
+                    AudioDeviceInfo.TYPE_USB_DEVICE -> "USB Audio"
+                    AudioDeviceInfo.TYPE_USB_HEADSET -> "USB Headset"
+                    else -> getDeviceTypeName(it.type)
+                }
             }
         } ?: "No Output"
     }

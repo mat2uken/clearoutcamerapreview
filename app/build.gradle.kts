@@ -10,6 +10,10 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            all {
+                it.jvmArgs("-Xmx2048m")
+                it.systemProperty("robolectric.logging.enabled", "true")
+            }
         }
     }
 

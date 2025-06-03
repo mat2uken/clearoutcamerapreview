@@ -171,4 +171,114 @@ class CameraUtilsTest {
         assertEquals(displayHeight, height)
         assertEquals((displayHeight * cameraAspectRatio).toInt(), width)
     }
+    
+    @Test
+    fun `selectOptimalResolution with single size`() {
+        val sizes = listOf(Size(1280, 720))
+        
+        val result = CameraUtils.selectOptimalResolution(sizes)
+        assertNotNull(result)
+        assertEquals(1280, result!!.width)
+        assertEquals(720, result.height)
+    }
+    
+    @Test
+    fun `selectOptimalResolution with unusual aspect ratios`() {
+        val sizes = listOf(
+            Size(1000, 1000),  // 1:1 square
+            Size(2000, 1000),  // 2:1 ultra-wide
+            Size(1000, 2000),  // 1:2 ultra-tall
+            Size(1333, 1000)   // 4:3
+        )
+        
+        val result = CameraUtils.selectOptimalResolution(sizes)
+        assertNotNull(result)
+        // Should pick the one closest to 16:9
+        assertEquals(2000, result!!.width)
+        assertEquals(1000, result.height)
+    }
+    
+    @Test
+    fun `formatZoomRatio with extreme values`() {
+        assertEquals("0.1x", CameraUtils.formatZoomRatio(0.1f))
+        assertEquals("0.0x", CameraUtils.formatZoomRatio(0.0f))
+        assertEquals("100.0x", CameraUtils.formatZoomRatio(100.0f))
+        assertEquals("999.9x", CameraUtils.formatZoomRatio(999.9f))
+    }
+    
+    @Test
+    fun `formatZoomRatio with negative values`() {
+        // Should handle gracefully even though negative zoom doesn't make sense
+        assertEquals("-1.0x", CameraUtils.formatZoomRatio(-1.0f))
+    }
+    
+    @Test
+    fun `clampZoom with inverted min max`() {
+        val min = 10f
+        val max = 1f
+        
+        // Should still work correctly even with inverted bounds
+        // When bounds are inverted, actualMin=1f and actualMax=10f
+        assertEquals(10f, CameraUtils.clampZoom(15f, min, max), 0.001f) // Clamped to actualMax
+        assertEquals(1f, CameraUtils.clampZoom(0.5f, min, max), 0.001f) // Clamped to actualMin
+        assertEquals(5f, CameraUtils.clampZoom(5f, min, max), 0.001f) // Within range
+    }
+    
+    @Test
+    fun `clampZoom with equal min and max`() {
+        val value = 5f
+        
+        assertEquals(value, CameraUtils.clampZoom(1f, value, value), 0.001f)
+        assertEquals(value, CameraUtils.clampZoom(10f, value, value), 0.001f)
+    }
+    
+    @Test
+    fun `calculateOptimalPreviewSize with square display`() {
+        val displaySize = 1000
+        val cameraAspectRatio = 16f / 9f
+        
+        val (width, height) = CameraUtils.calculateOptimalPreviewSize(
+            displaySize, displaySize, cameraAspectRatio, false
+        )
+        
+        // Should fit within square bounds
+        assertTrue(width <= displaySize)
+        assertTrue(height <= displaySize)
+        
+        // Should maintain camera aspect ratio
+        val actualRatio = width.toFloat() / height.toFloat()
+        assertEquals(cameraAspectRatio, actualRatio, 0.01f)
+    }
+    
+    @Test
+    fun `calculateOptimalPreviewSize with very small display`() {
+        val displayWidth = 100
+        val displayHeight = 100
+        val cameraAspectRatio = 16f / 9f
+        
+        val (width, height) = CameraUtils.calculateOptimalPreviewSize(
+            displayWidth, displayHeight, cameraAspectRatio, false
+        )
+        
+        // Should still produce valid dimensions
+        assertTrue(width > 0)
+        assertTrue(height > 0)
+        assertTrue(width <= displayWidth)
+        assertTrue(height <= displayHeight)
+    }
+    
+    @Test
+    fun `calculateOptimalPreviewSize with extreme aspect ratio`() {
+        val displayWidth = 1000
+        val displayHeight = 100
+        val cameraAspectRatio = 1f // Square camera
+        
+        val (width, height) = CameraUtils.calculateOptimalPreviewSize(
+            displayWidth, displayHeight, cameraAspectRatio, false
+        )
+        
+        // Should be height-constrained
+        assertEquals(displayHeight, height)
+        assertEquals(displayHeight, width) // Square aspect ratio
+    }
 }

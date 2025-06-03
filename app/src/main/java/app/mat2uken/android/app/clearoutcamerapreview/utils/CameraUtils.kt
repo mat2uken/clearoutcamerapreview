@@ -51,7 +51,10 @@ object CameraUtils {
      * Clamps zoom value between min and max
      */
     fun clampZoom(value: Float, min: Float, max: Float): Float {
-        return value.coerceIn(min, max)
+        // Handle inverted bounds case
+        val actualMin = minOf(min, max)
+        val actualMax = maxOf(min, max)
+        return value.coerceIn(actualMin, actualMax)
     }
     
     /**

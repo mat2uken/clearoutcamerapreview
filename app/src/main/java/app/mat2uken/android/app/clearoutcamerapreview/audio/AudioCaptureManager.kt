@@ -370,9 +370,13 @@ class AudioCaptureManager(
         isManuallyMuted = !isManuallyMuted
         Log.d(TAG, "Manual mute toggled: $isManuallyMuted")
         
+        // Always update the manual mute state
+        _state.value = _state.value.copy(
+            isManuallyMuted = isManuallyMuted
+        )
+        
         if (_state.value.isCapturing) {
             _state.value = _state.value.copy(
-                isManuallyMuted = isManuallyMuted,
                 isMuted = !audioDeviceMonitor?.hasExternalAudioOutput?.value!! || isManuallyMuted,
                 isPlaying = audioDeviceMonitor?.hasExternalAudioOutput?.value!! && !isManuallyMuted
             )
