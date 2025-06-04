@@ -154,6 +154,7 @@ object AudioConfigurationHelper {
     /**
      * Test if we can actually create an AudioRecord with given parameters
      */
+    @Suppress("MissingPermission") // Permission check is responsibility of the caller
     private fun canCreateAudioRecord(sampleRate: Int, channelConfig: Int): Boolean {
         return try {
             val bufferSize = AudioRecord.getMinBufferSize(

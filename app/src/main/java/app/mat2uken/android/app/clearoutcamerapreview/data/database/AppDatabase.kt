@@ -30,9 +30,9 @@ abstract class AppDatabase : RoomDatabase() {
          * - Migrate existing data to use "0" (back camera) as default cameraId
          */
         private val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(database: SupportSQLiteDatabase) {
+            override fun migrate(db: SupportSQLiteDatabase) {
                 // Create new table with updated schema
-                database.execSQL("""
+                db.execSQL("""
                     CREATE TABLE IF NOT EXISTS display_settings_new (
                         displayId TEXT NOT NULL,
                         cameraId TEXT NOT NULL,
@@ -45,17 +45,17 @@ abstract class AppDatabase : RoomDatabase() {
                 """)
                 
                 // Copy existing data to new table with default cameraId "0" (back camera)
-                database.execSQL("""
+                db.execSQL("""
                     INSERT INTO display_settings_new (displayId, cameraId, isVerticallyFlipped, isHorizontallyFlipped, displayName, cameraName)
                     SELECT displayId, '0', isVerticallyFlipped, isHorizontallyFlipped, displayName, 'Back Camera'
                     FROM display_settings
                 """)
                 
                 // Drop old table
-                database.execSQL("DROP TABLE display_settings")
+                db.execSQL("DROP TABLE display_settings")
                 
                 // Rename new table to old table name
-                database.execSQL("ALTER TABLE display_settings_new RENAME TO display_settings")
+                db.execSQL("ALTER TABLE display_settings_new RENAME TO display_settings")
             }
         }
         

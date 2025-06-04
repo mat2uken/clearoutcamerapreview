@@ -271,11 +271,30 @@ app/src/main/java/.../clearoutcamerapreview/
 15. **Camera Format Model**: Added CameraFormat data class to handle resolution and frame rate combinations
 16. **Camera-Display Settings**: Flip settings now stored per camera-display combination with DB migration
 17. **Sidebar Toggle UI**: Replaced tap-to-toggle with dedicated buttons and status bar aware positioning
+18. **Code Cleanup**: Removed 8 unused files, fixed deprecated API warnings, improved testability with FrameRateUtils extraction
+
+### Recent Code Cleanup (December 2024)
+- **Files Removed**: 8 unused implementation files and test files
+  - Old camera screen implementations (CameraScreen, MultiDisplayCameraScreen, etc.)
+  - Unused helper classes (ExternalDisplayManager, PresentationHelper)
+  - Backup files and obsolete test files
+- **API Compatibility Fixes**:
+  - Updated deprecated `windowManager.defaultDisplay` to `context.display` with version checks
+  - Fixed `window.decorView.systemUiVisibility` to use `WindowInsetsController` on API 30+
+  - Replaced deprecated `Divider` with `HorizontalDivider` composable
+  - Added proper null safety for window insets controller access
+- **Lint Fixes**:
+  - Added `@Suppress("MissingPermission")` annotations where permissions are checked elsewhere
+  - Removed redundant label from AndroidManifest.xml
+- **Test Improvements**:
+  - All 146 unit tests passing successfully
+  - Extracted frame rate detection logic to testable FrameRateUtils class
+  - Maintained 100% test coverage for utility classes
 
 ### Test Device
-- Device IP: 192.168.0.238:5555
+- Device IP: 192.168.0.137:5555
 - ADB commands:
   ```bash
-  ~/Library/Android/sdk/platform-tools/adb -s 192.168.0.238:5555 install -r app/build/outputs/apk/debug/app-debug.apk
-  ~/Library/Android/sdk/platform-tools/adb -s 192.168.0.238:5555 shell am start -n app.mat2uken.android.app.clearoutcamerapreview/.MainActivity
+  ~/Library/Android/sdk/platform-tools/adb -s 192.168.0.137:5555 install -r app/build/outputs/apk/debug/app-debug.apk
+  ~/Library/Android/sdk/platform-tools/adb -s 192.168.0.137:5555 shell am start -n app.mat2uken.android.app.clearoutcamerapreview/.MainActivity
   ```

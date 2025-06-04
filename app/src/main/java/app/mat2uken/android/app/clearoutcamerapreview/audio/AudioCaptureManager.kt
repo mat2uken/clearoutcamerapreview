@@ -166,6 +166,7 @@ class AudioCaptureManager(
     /**
      * Initialize AudioRecord and AudioTrack
      */
+    @Suppress("MissingPermission") // Permission is checked before calling this method
     private suspend fun initializeAudioComponents() = withContext(Dispatchers.IO) {
         val config = audioConfig ?: throw IllegalStateException("Audio configuration not set")
         
@@ -376,10 +377,12 @@ class AudioCaptureManager(
         )
         
         if (_state.value.isCapturing) {
-            _state.value = _state.value.copy(
-                isMuted = !audioDeviceMonitor?.hasExternalAudioOutput?.value!! || isManuallyMuted,
-                isPlaying = audioDeviceMonitor?.hasExternalAudioOutput?.value!! && !isManuallyMuted
-            )
+            audioDeviceMonitor?.let { monitor ->
+                _state.value = _state.value.copy(
+                    isMuted = !monitor.hasExternalAudioOutput.value || isManuallyMuted,
+                    isPlaying = monitor.hasExternalAudioOutput.value && !isManuallyMuted
+                )
+            }
         }
     }
     

@@ -58,6 +58,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import app.mat2uken.android.app.clearoutcamerapreview.audio.AudioCoordinator
 import app.mat2uken.android.app.clearoutcamerapreview.utils.CameraRotationHelper
+import app.mat2uken.android.app.clearoutcamerapreview.utils.FrameRateUtils
 import app.mat2uken.android.app.clearoutcamerapreview.data.SettingsRepository
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -193,13 +194,17 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
-    val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val statusBarHeight = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
     
     // Get the current rotation
     val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-    val rotation = windowManager.defaultDisplay.rotation
+    val rotation = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+        context.display.rotation
+    } else {
+        @Suppress("DEPRECATION")
+        windowManager.defaultDisplay.rotation
+    }
     
     // Settings repository
     val settingsRepository = remember { SettingsRepository(context) }
@@ -295,13 +300,6 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
         }
         
         Log.d(TAG, "Checked displays. External display ${if (external != null) "found" else "not found"}")
-    }
-    
-    // Original implementation preserved for reference
-    fun checkExternalDisplaysOld() {
-        val displays = displayManager.displays
-        externalDisplay = displays.firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }
-        Log.d(TAG, "External display check: ${externalDisplay?.displayId}")
     }
     
     // Initialize display state
@@ -492,42 +490,10 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                 }
                 
                 // Get actual frame rate from camera
-                try {
-                    val camera2Info = androidx.camera.camera2.interop.Camera2CameraInfo.from(cam.cameraInfo)
-                    val cameraId = camera2Info.cameraId
-                    val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
-                    val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-                    
-                    // Get the current FPS range from camera characteristics
-                    val fpsRanges = characteristics.get(
-                        android.hardware.camera2.CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
+                if (selectedFrameRateRange == null) {
+                    actualFrameRateRange = FrameRateUtils.detectActualFrameRate(
+                        cam, context, actualPreviewSize, selectedResolution
                     )
-                    
-                    // If we don't have a selected range, determine the actual/default range
-                    if (selectedFrameRateRange == null && !fpsRanges.isNullOrEmpty()) {
-                        // Check if we have a preview resolution that matches common frame rates
-                        val previewSize = actualPreviewSize ?: selectedResolution
-                        
-                        // For 1920x1080, prefer 60fps if available, otherwise 30fps
-                        val targetFps = if (previewSize?.width == 1920 && previewSize.height == 1080) {
-                            // Try to find 60fps range first
-                            fpsRanges.find { range ->
-                                range.upper == 60 && range.lower <= 60
-                            } ?: fpsRanges.find { range ->
-                                range.upper == 30 || (range.lower <= 30 && range.upper >= 30)
-                            }
-                        } else {
-                            // For other resolutions, prefer 30fps
-                            fpsRanges.find { range ->
-                                range.upper == 30 || (range.lower <= 30 && range.upper >= 30)
-                            }
-                        } ?: fpsRanges[0]
-                        
-                        actualFrameRateRange = android.util.Range(targetFps.lower, targetFps.upper)
-                        Log.d(TAG, "Detected frame rate range: ${targetFps.lower}-${targetFps.upper} fps for resolution ${previewSize?.width}x${previewSize?.height}")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to get camera frame rate info", e)
                 }
                 
                 Log.d(TAG, "Camera bound successfully")
@@ -673,36 +639,10 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                         }
                         
                         // Get actual frame rate from camera (same as above)
-                        try {
-                            val camera2Info = androidx.camera.camera2.interop.Camera2CameraInfo.from(newCam.cameraInfo)
-                            val cameraId = camera2Info.cameraId
-                            val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
-                            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-                            
-                            val fpsRanges = characteristics.get(
-                                android.hardware.camera2.CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
+                        if (selectedFrameRateRange == null) {
+                            actualFrameRateRange = FrameRateUtils.detectActualFrameRate(
+                                newCam, context, actualPreviewSize, selectedResolution
                             )
-                            
-                            if (selectedFrameRateRange == null && !fpsRanges.isNullOrEmpty()) {
-                                val previewSize = actualPreviewSize ?: selectedResolution
-                                
-                                val targetFps = if (previewSize?.width == 1920 && previewSize.height == 1080) {
-                                    fpsRanges.find { range ->
-                                        range.upper == 60 && range.lower <= 60
-                                    } ?: fpsRanges.find { range ->
-                                        range.upper == 30 || (range.lower <= 30 && range.upper >= 30)
-                                    }
-                                } else {
-                                    fpsRanges.find { range ->
-                                        range.upper == 30 || (range.lower <= 30 && range.upper >= 30)
-                                    }
-                                } ?: fpsRanges[0]
-                                
-                                actualFrameRateRange = android.util.Range(targetFps.lower, targetFps.upper)
-                                Log.d(TAG, "External display: Detected frame rate range: ${targetFps.lower}-${targetFps.upper} fps")
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to get camera frame rate info for external display", e)
                         }
                         
                         externalPresentation = presentation
@@ -807,7 +747,7 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                     }
                 }
                 
-                Divider()
+                HorizontalDivider()
                 
                 // Display Status Section
                 SidebarSection(title = "Display Status") {
@@ -930,7 +870,7 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                         onClick = { showCameraDialog = true }
                     )
                     
-                    camera?.let { cam ->
+                    camera?.let { _ ->
                         ClickableRow(
                             label = "Zoom",
                             value = "${String.format("%.1f", cameraState.zoomRatio)}x",
@@ -1094,15 +1034,34 @@ class SimpleCameraPresentation(
         
         try {
             // Make fullscreen
-            window?.decorView?.systemUiVisibility = (
-                android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or
-                android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-            )
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    window?.decorView?.windowInsetsController?.let { controller ->
+                        controller.hide(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())
+                        controller.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    }
+                } else {
+                    @Suppress("DEPRECATION")
+                    window?.decorView?.systemUiVisibility = (
+                        android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or
+                        android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                        android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to set fullscreen mode", e)
+            }
             
             // Get display metrics and info
             val displayMetrics = android.util.DisplayMetrics()
-            display.getRealMetrics(displayMetrics)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                val bounds = context.getSystemService(WindowManager::class.java).currentWindowMetrics.bounds
+                displayMetrics.widthPixels = bounds.width()
+                displayMetrics.heightPixels = bounds.height()
+            } else {
+                @Suppress("DEPRECATION")
+                display.getRealMetrics(displayMetrics)
+            }
             val displayWidth = displayMetrics.widthPixels
             val displayHeight = displayMetrics.heightPixels
             val displayRotation = display.rotation
@@ -1282,7 +1241,7 @@ private fun SidebarSection(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
         content()
-        Divider(modifier = Modifier.padding(vertical = 8.dp))
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
     }
 }
 
