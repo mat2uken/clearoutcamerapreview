@@ -40,6 +40,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 また、以下の機能を備えます。
 - カメラ機能
+  - 映像キャプチャフォーマットの自動選択
+    - 解像度
+      - 1920x1080が選択可能であれば最優先で選択する
+      - それ以外では、16:9にアスペクト比が最も近く、1920x1080以下の解像度のものを選択する
+    - フレームレート
+      - 選択された解像度の中で、60fpsが選べる場合は最優先でそれを選ぶ
+      - それ以外では、60fps以下で最も高いフレームレートを選択する
+      - 実際に使用されているフレームレートの検出と表示
+        - CameraX で明示的にフレームレートが設定されていない場合も、実際のキャプチャフレームレートを検出
+        - 1920x1080の解像度では60fps優先、その他の解像度では30fps優先で自動選択
   - ズーム率の変更
     - それぞれのハードウェアが備える範囲をハードウェアから拡大、縮小ができる最小値と最大値を取得し、それを変更できるスライダー
   - カメラの種別（背面カメラ、前面カメラなど）もしくはレンズの切り替えが可能になるプルダウンメニュー
@@ -116,7 +126,8 @@ app/src/main/java/.../clearoutcamerapreview/
 │       ├── CameraSettings.kt         # Entity for camera-specific settings
 │       └── AppSettings.kt            # Entity for general app settings
 ├── model/
-│   └── Size.kt                       # Custom Size class for testing
+│   ├── Size.kt                       # Custom Size class for testing
+│   └── CameraFormat.kt               # Camera format with resolution and frame rate
 └── ui/theme/                         # Compose theming components
 ```
 
@@ -247,6 +258,8 @@ app/src/main/java/.../clearoutcamerapreview/
 11. **Settings Persistence**: Implemented Room database for saving user preferences
 12. **Camera Rotation Helper**: Extracted rotation logic for better testability
 13. **Test Coverage**: Expanded to 150+ tests with 100% success rate
+14. **Frame Rate Detection**: Added automatic detection of actual camera capture frame rate when not explicitly set
+15. **Camera Format Model**: Added CameraFormat data class to handle resolution and frame rate combinations
 
 ### Test Device
 - Device IP: 192.168.0.238:5555

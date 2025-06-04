@@ -114,6 +114,74 @@ private fun getSupportedPreviewSizes(
     }
 }
 
+/**
+ * Gets supported camera formats with resolution and frame rate combinations
+ */
+@androidx.camera.camera2.interop.ExperimentalCamera2Interop
+private fun getSupportedCameraFormats(
+    context: Context,
+    cameraProvider: ProcessCameraProvider,
+    cameraSelector: CameraSelector
+): List<app.mat2uken.android.app.clearoutcamerapreview.model.CameraFormat> {
+    return try {
+        val cameraInfo = cameraProvider.availableCameraInfos
+            .find { it.cameraSelector == cameraSelector }
+        
+        cameraInfo?.let { info ->
+            val camera2Info = androidx.camera.camera2.interop.Camera2CameraInfo.from(info)
+            val cameraId = camera2Info.cameraId
+            val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+            val streamConfigMap = characteristics.get(
+                android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
+            )
+            
+            val formats = mutableListOf<app.mat2uken.android.app.clearoutcamerapreview.model.CameraFormat>()
+            
+            streamConfigMap?.let { configMap ->
+                // Get output sizes for preview
+                val sizes = configMap.getOutputSizes(android.graphics.SurfaceTexture::class.java)
+                
+                sizes?.forEach { androidSize ->
+                    // Get supported frame rate ranges for this size
+                    val fpsRanges = characteristics.get(
+                        android.hardware.camera2.CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
+                    ) ?: emptyArray()
+                    
+                    // Check which FPS ranges are actually supported for this size
+                    val supportedRanges = fpsRanges.filter { range ->
+                        // CameraX preview typically supports all advertised FPS ranges
+                        // but we'll be conservative and check if it's reasonable
+                        range.upper <= 120 && range.lower >= 5
+                    }.map { androidRange ->
+                        android.util.Range(androidRange.lower, androidRange.upper)
+                    }
+                    
+                    if (supportedRanges.isNotEmpty()) {
+                        formats.add(
+                            app.mat2uken.android.app.clearoutcamerapreview.model.CameraFormat(
+                                size = CustomSize(androidSize.width, androidSize.height),
+                                frameRateRanges = supportedRanges
+                            )
+                        )
+                    }
+                }
+            }
+            
+            Log.d(TAG, "Found ${formats.size} camera formats with frame rate information")
+            formats.forEach { format ->
+                Log.d(TAG, "Format: ${format.size.width}x${format.size.height}, " +
+                         "FPS ranges: ${format.frameRateRanges.joinToString { "${it.lower}-${it.upper}" }}")
+            }
+            
+            formats
+        } ?: emptyList()
+    } catch (e: Exception) {
+        Log.e(TAG, "Error getting camera formats", e)
+        emptyList()
+    }
+}
+
 @androidx.camera.camera2.interop.ExperimentalCamera2Interop
 @Composable
 fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = null) {
@@ -132,6 +200,8 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
     // Camera state
     var camera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
     var cameraState by remember { mutableStateOf(CameraState()) }
+    var selectedFrameRateRange by remember { mutableStateOf<android.util.Range<Int>?>(null) }
+    var actualFrameRateRange by remember { mutableStateOf<android.util.Range<Int>?>(null) }
     
     // Initialize settings
     LaunchedEffect(Unit) {
@@ -147,6 +217,7 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
     var isVerticallyFlipped by remember { mutableStateOf(false) }
     var isHorizontallyFlipped by remember { mutableStateOf(false) }
     var currentDisplayId by remember { mutableStateOf<String?>(null) }
+    var areSettingsLoaded by remember { mutableStateOf(false) }
     
     // Display management
     val displayManager = remember { context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager }
@@ -202,11 +273,18 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
         external?.let { display ->
             val displayId = display.displayId.toString()
             currentDisplayId = displayId
+            areSettingsLoaded = false
             coroutineScope.launch {
                 val displaySettings = settingsRepository.getDisplaySettings(displayId)
                 isVerticallyFlipped = displaySettings.isVerticallyFlipped
                 isHorizontallyFlipped = displaySettings.isHorizontallyFlipped
+                areSettingsLoaded = true
+                Log.d(TAG, "Display settings loaded for $displayId: V=$isVerticallyFlipped, H=$isHorizontallyFlipped")
             }
+        } ?: run {
+            // Clear current display ID when no external display is connected
+            currentDisplayId = null
+            areSettingsLoaded = false
         }
         
         Log.d(TAG, "Checked displays. External display ${if (external != null) "found" else "not found"}")
@@ -247,6 +325,8 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
             
             override fun onDisplayChanged(displayId: Int) {
                 Log.d(TAG, "Display changed: $displayId")
+                // Also check displays on display change events
+                checkExternalDisplays()
             }
         }
         
@@ -273,20 +353,35 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                 // Unbind all use cases
                 cameraProvider.unbindAll()
                 
-                // Get supported output sizes for the preview
-                val supportedSizes = getSupportedPreviewSizes(context, cameraProvider, cameraState.cameraSelector)
+                // Get supported camera formats with frame rate information
+                val supportedFormats = getSupportedCameraFormats(context, cameraProvider, cameraState.cameraSelector)
                 
-                // Select optimal resolution
-                val targetResolution = selectOptimalResolution(supportedSizes)
-                selectedResolution = targetResolution
+                // Select optimal format (resolution + frame rate)
+                val optimalFormat = CameraUtils.selectOptimalCameraFormat(supportedFormats)
+                
+                if (optimalFormat != null) {
+                    val (format, frameRateRange) = optimalFormat
+                    selectedResolution = Size(format.size.width, format.size.height)
+                    selectedFrameRateRange = frameRateRange
+                    Log.d(TAG, "Selected format: ${format.size.width}x${format.size.height} @ ${frameRateRange.lower}-${frameRateRange.upper} fps")
+                    Log.d(TAG, "selectedFrameRateRange set to: ${selectedFrameRateRange?.lower}-${selectedFrameRateRange?.upper}")
+                } else {
+                    // Fallback to resolution-only selection
+                    val supportedSizes = getSupportedPreviewSizes(context, cameraProvider, cameraState.cameraSelector)
+                    val targetResolution = selectOptimalResolution(supportedSizes)
+                    selectedResolution = targetResolution
+                    selectedFrameRateRange = null
+                    Log.d(TAG, "Using fallback resolution selection: ${targetResolution?.width}x${targetResolution?.height}")
+                }
                 
                 // Create preview with selected resolution
                 // Use getTargetRotation only for front camera
                 val isFront = CameraRotationHelper.isFrontCamera(cameraState.cameraSelector)
                 val targetRotation = CameraRotationHelper.getTargetRotation(rotation, isFront)
+                val targetResolution = selectedResolution
                 
                 val preview = if (targetResolution != null) {
-                    Preview.Builder()
+                    val previewBuilder = Preview.Builder()
                         .setTargetAspectRatio(
                             if (targetResolution.width * 9 == targetResolution.height * 16) {
                                 AspectRatio.RATIO_16_9
@@ -295,7 +390,22 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                             }
                         )
                         .setTargetRotation(targetRotation)
-                        .build()
+                    
+                    // Apply frame rate range if available
+                    selectedFrameRateRange?.let { fpsRange ->
+                        try {
+                            val camera2Interop = androidx.camera.camera2.interop.Camera2Interop.Extender(previewBuilder)
+                            camera2Interop.setCaptureRequestOption(
+                                android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                                fpsRange
+                            )
+                            Log.d(TAG, "Applied frame rate range: ${fpsRange.lower}-${fpsRange.upper} fps")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to apply frame rate range", e)
+                        }
+                    }
+                    
+                    previewBuilder.build()
                         .also {
                             Log.d(TAG, "Preview created with target aspect ratio for resolution: ${targetResolution.width}x${targetResolution.height}, rotation: $targetRotation, isFront: $isFront")
                         }
@@ -364,6 +474,45 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                     }
                 }
                 
+                // Get actual frame rate from camera
+                try {
+                    val camera2Info = androidx.camera.camera2.interop.Camera2CameraInfo.from(cam.cameraInfo)
+                    val cameraId = camera2Info.cameraId
+                    val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+                    val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+                    
+                    // Get the current FPS range from camera characteristics
+                    val fpsRanges = characteristics.get(
+                        android.hardware.camera2.CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
+                    )
+                    
+                    // If we don't have a selected range, determine the actual/default range
+                    if (selectedFrameRateRange == null && !fpsRanges.isNullOrEmpty()) {
+                        // Check if we have a preview resolution that matches common frame rates
+                        val previewSize = actualPreviewSize ?: selectedResolution
+                        
+                        // For 1920x1080, prefer 60fps if available, otherwise 30fps
+                        val targetFps = if (previewSize?.width == 1920 && previewSize.height == 1080) {
+                            // Try to find 60fps range first
+                            fpsRanges.find { range ->
+                                range.upper == 60 && range.lower <= 60
+                            } ?: fpsRanges.find { range ->
+                                range.upper == 30 || (range.lower <= 30 && range.upper >= 30)
+                            }
+                        } else {
+                            // For other resolutions, prefer 30fps
+                            fpsRanges.find { range ->
+                                range.upper == 30 || (range.lower <= 30 && range.upper >= 30)
+                            }
+                        } ?: fpsRanges[0]
+                        
+                        actualFrameRateRange = android.util.Range(targetFps.lower, targetFps.upper)
+                        Log.d(TAG, "Detected frame rate range: ${targetFps.lower}-${targetFps.upper} fps for resolution ${previewSize?.width}x${previewSize?.height}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to get camera frame rate info", e)
+                }
+                
                 Log.d(TAG, "Camera bound successfully")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to bind camera", e)
@@ -375,12 +524,12 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
         }
     }
     
-    // Handle external display
-    LaunchedEffect(externalDisplay, camera, rotation, isVerticallyFlipped, isHorizontallyFlipped) {
+    // Handle external display - add areSettingsLoaded to dependencies to wait for settings
+    LaunchedEffect(externalDisplay, camera, rotation, isVerticallyFlipped, isHorizontallyFlipped, currentDisplayId, areSettingsLoaded) {
         val display = externalDisplay
         val cam = camera
         
-        if (display != null && cam != null) {
+        if (display != null && cam != null && currentDisplayId != null && areSettingsLoaded) {
             try {
                 // Dismiss existing presentation
                 externalPresentation?.dismiss()
@@ -408,28 +557,53 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                     try {
                         val cameraProvider = cameraProviderFuture.get()
                         
-                        // Get supported output sizes for the preview
-                        val supportedSizes = getSupportedPreviewSizes(context, cameraProvider, cameraState.cameraSelector)
+                        // Get supported camera formats with frame rate information
+                        val supportedFormats = getSupportedCameraFormats(context, cameraProvider, cameraState.cameraSelector)
                         
-                        // Select optimal resolution
-                        val targetResolution = selectOptimalResolution(supportedSizes)
-                        selectedResolution = targetResolution
+                        // Select optimal format (resolution + frame rate)
+                        val optimalFormat = CameraUtils.selectOptimalCameraFormat(supportedFormats)
+                        
+                        if (optimalFormat != null) {
+                            val (format, frameRateRange) = optimalFormat
+                            selectedResolution = Size(format.size.width, format.size.height)
+                            selectedFrameRateRange = frameRateRange
+                        } else {
+                            // Fallback to resolution-only selection
+                            val supportedSizes = getSupportedPreviewSizes(context, cameraProvider, cameraState.cameraSelector)
+                            val targetResolution = selectOptimalResolution(supportedSizes)
+                            selectedResolution = targetResolution
+                            selectedFrameRateRange = null
+                        }
                         
                         // Create previews with selected resolution
                         // Use getTargetRotation only for front camera
                         val isFrontCam = CameraRotationHelper.isFrontCamera(cameraState.cameraSelector)
                         val externalTargetRotation = CameraRotationHelper.getTargetRotation(rotation, isFrontCam)
                         
-                        val previewBuilder = if (targetResolution != null) {
-                            Preview.Builder()
+                        val previewBuilder = if (selectedResolution != null) {
+                            val builder = Preview.Builder()
                                 .setTargetAspectRatio(
-                                    if (targetResolution.width * 9 == targetResolution.height * 16) {
+                                    if (selectedResolution!!.width * 9 == selectedResolution!!.height * 16) {
                                         AspectRatio.RATIO_16_9
                                     } else {
                                         AspectRatio.RATIO_4_3
                                     }
                                 )
                                 .setTargetRotation(externalTargetRotation)
+                            
+                            // Apply frame rate range if available
+                            selectedFrameRateRange?.let { fpsRange ->
+                                try {
+                                    val camera2Interop = androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
+                                    camera2Interop.setCaptureRequestOption(
+                                        android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                                        fpsRange
+                                    )
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to apply frame rate range for external display", e)
+                                }
+                            }
+                            builder
                         } else {
                             Preview.Builder()
                                 .setTargetAspectRatio(AspectRatio.RATIO_16_9)
@@ -479,6 +653,39 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                                 zoomState.minZoomRatio,
                                 zoomState.maxZoomRatio
                             ).updateZoomRatio(zoomState.zoomRatio)
+                        }
+                        
+                        // Get actual frame rate from camera (same as above)
+                        try {
+                            val camera2Info = androidx.camera.camera2.interop.Camera2CameraInfo.from(newCam.cameraInfo)
+                            val cameraId = camera2Info.cameraId
+                            val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+                            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+                            
+                            val fpsRanges = characteristics.get(
+                                android.hardware.camera2.CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
+                            )
+                            
+                            if (selectedFrameRateRange == null && !fpsRanges.isNullOrEmpty()) {
+                                val previewSize = actualPreviewSize ?: selectedResolution
+                                
+                                val targetFps = if (previewSize?.width == 1920 && previewSize.height == 1080) {
+                                    fpsRanges.find { range ->
+                                        range.upper == 60 && range.lower <= 60
+                                    } ?: fpsRanges.find { range ->
+                                        range.upper == 30 || (range.lower <= 30 && range.upper >= 30)
+                                    }
+                                } else {
+                                    fpsRanges.find { range ->
+                                        range.upper == 30 || (range.lower <= 30 && range.upper >= 30)
+                                    }
+                                } ?: fpsRanges[0]
+                                
+                                actualFrameRateRange = android.util.Range(targetFps.lower, targetFps.upper)
+                                Log.d(TAG, "External display: Detected frame rate range: ${targetFps.lower}-${targetFps.upper} fps")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to get camera frame rate info for external display", e)
                         }
                         
                         externalPresentation = presentation
@@ -661,6 +868,24 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                         StatusRow(
                             label = "Aspect Ratio",
                             value = String.format("%.2f", size.width.toFloat() / size.height)
+                        )
+                    }
+                    // Show frame rate - prefer selected, then actual, then "Not available"
+                    val fpsRange = selectedFrameRateRange ?: actualFrameRateRange
+                    if (fpsRange != null) {
+                        StatusRow(
+                            label = "Frame Rate",
+                            value = if (fpsRange.lower == fpsRange.upper) {
+                                "${fpsRange.upper} fps"
+                            } else {
+                                "${fpsRange.lower}-${fpsRange.upper} fps"
+                            }
+                        )
+                    } else {
+                        // Show default message if frame rate info is not available
+                        StatusRow(
+                            label = "Frame Rate",
+                            value = "Detecting..."
                         )
                     }
                 }

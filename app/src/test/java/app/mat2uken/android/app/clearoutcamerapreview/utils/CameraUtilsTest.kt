@@ -281,4 +281,8 @@ class CameraUtilsTest {
         assertEquals(displayHeight, height)
         assertEquals(displayHeight, width) // Square aspect ratio
     }
+    
+    // Note: Frame rate selection tests require android.util.Range which is not available
+    // in unit tests. These tests should be implemented as instrumented tests or with
+    // proper mocking framework setup.
 }
