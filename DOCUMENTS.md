@@ -57,13 +57,18 @@ requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 ```
 
 ### 2. SimplifiedMultiDisplayCameraScreen
-メインの画面コンポーザブル。すべてのUI要素とビジネスロジックを統合。
+メインの画面コンポーザブル。リファクタリングにより、2075行から1289行に削減。
 
 主な責務：
 - カメラプレビューの管理
 - 外部ディスプレイの検出と管理
 - 設定の保存/復元
 - UIイベントの処理
+
+関連する抽出されたコンポーネント：
+- **SimpleCameraPresentation** (presentation/SimpleCameraPresentation.kt) - 外部ディスプレイPresentation
+- **CameraDialogs** (ui/CameraDialogs.kt) - すべてのダイアログコンポーネント
+- **CameraSidebar** (ui/CameraSidebar.kt) - サイドバーUIコンポーネント
 
 ### 3. CameraState
 イミュータブルなカメラ状態管理。
@@ -218,6 +223,36 @@ object DisplayUtils {
 - 低遅延オーディオパススルー
 - 手動/自動ミュート制御
 - preferredDevice APIによるデバイス選択
+- テスト可能性のための依存性注入（AudioComponentFactory）
+
+### Audio Interfaces（テスト可能性向上）
+リファクタリングにより追加されたインターフェース：
+
+```kotlin
+interface AudioRecordWrapper {
+    val state: Int
+    val recordingState: Int
+    fun startRecording()
+    fun stop()
+    fun release()
+    fun read(audioData: ByteArray, offsetInBytes: Int, sizeInBytes: Int): Int
+}
+
+interface AudioTrackWrapper {
+    val state: Int
+    val playState: Int
+    var preferredDevice: AudioDeviceInfo?
+    fun play()
+    fun stop()
+    fun release()
+    fun write(audioData: ByteArray, offsetInBytes: Int, sizeInBytes: Int): Int
+}
+
+interface AudioComponentFactory {
+    fun createAudioRecord(...): AudioRecordWrapper
+    fun createAudioTrack(...): AudioTrackWrapper
+}
+```
 
 ### AudioConfigurationHelper
 最適なオーディオ設定を決定。
@@ -247,29 +282,51 @@ object DisplayUtils {
 - **ClickableRow**: クリック可能な設定行
 - **MuteControlRow**: ミュートトグル
 
+## リファクタリング成果
+
+### コード品質の向上
+1. **SimplifiedMultiDisplayCameraScreen**: 2075行 → 1289行（38%削減）
+2. **コンポーネントの分離**:
+   - SimpleCameraPresentation（外部ディスプレイロジック）
+   - CameraDialogs（ダイアログコンポーネント）
+   - CameraSidebar（サイドバーコンポーネント）
+3. **不要なファイルの削除**: DisplayManagerHelper（未使用）
+4. **テスト可能性の向上**: AudioインターフェースによるDI対応
+
 ## テスト戦略
 
 ### ユニットテスト
-- 150以上のテスト
+- 190のテスト
 - 100%の成功率
-- MockKとRobolectricを使用
+- MockK、JUnit4、Robolectricを使用
 
 ### テストカテゴリ
 
-1. **ユーティリティテスト**
+1. **ユーティリティテスト** (67テスト)
    - CameraUtilsTest (23)
    - CameraRotationHelperTest (10)
-   - DisplayUtilsTest (10)
+   - DisplayUtilsTest (25)
+   - FrameRateUtilsTest (9)
 
-2. **状態管理テスト**
+2. **状態管理テスト** (36テスト)
    - CameraStateTest (7)
    - SizeTest (8)
+   - CameraFormatTest (13)
+   - データベーステスト (8)
 
-3. **オーディオテスト**
+3. **オーディオテスト** (56テスト)
    - AudioDeviceMonitorTest (15)
    - AudioCaptureManagerIsolatedTest (9)
    - AudioCoordinatorTest (12)
    - AudioConfigurationHelperTest (15)
+   - AudioDeviceSelectionTest (4)
+   - AudioCaptureManagerPermissionTest (1)
+
+4. **その他のテスト** (31テスト)
+   - ValidationTest (10)
+   - SimpleUnitTest (10)
+   - CameraLogicTest (10)
+   - ExampleUnitTest (1)
 
 ### MockK静的モッキングの課題
 複数のテストファイルに分離して解決：

@@ -36,21 +36,21 @@ class CameraRotationHelperTest {
     }
     
     @Test
-    fun `test getTargetRotation for front camera swaps 90 and 270 rotations`() {
-        // Front camera needs rotation compensation
+    fun `test getTargetRotation for front camera returns device rotation unchanged`() {
+        // Front camera now uses device rotation directly like back camera
         assertEquals(Surface.ROTATION_0, CameraRotationHelper.getTargetRotation(Surface.ROTATION_0, true))
-        assertEquals(Surface.ROTATION_270, CameraRotationHelper.getTargetRotation(Surface.ROTATION_90, true))
+        assertEquals(Surface.ROTATION_90, CameraRotationHelper.getTargetRotation(Surface.ROTATION_90, true))
         assertEquals(Surface.ROTATION_180, CameraRotationHelper.getTargetRotation(Surface.ROTATION_180, true))
-        assertEquals(Surface.ROTATION_90, CameraRotationHelper.getTargetRotation(Surface.ROTATION_270, true))
+        assertEquals(Surface.ROTATION_270, CameraRotationHelper.getTargetRotation(Surface.ROTATION_270, true))
     }
     
     @Test
     fun `test getTargetRotation handles invalid rotation values`() {
-        // Should return ROTATION_0 for invalid values
-        assertEquals(Surface.ROTATION_0, CameraRotationHelper.getTargetRotation(-1, true))
-        assertEquals(Surface.ROTATION_0, CameraRotationHelper.getTargetRotation(999, true))
-        assertEquals(-1, CameraRotationHelper.getTargetRotation(-1, false)) // Back camera returns unchanged
-        assertEquals(999, CameraRotationHelper.getTargetRotation(999, false)) // Back camera returns unchanged
+        // Both cameras now return invalid values unchanged
+        assertEquals(-1, CameraRotationHelper.getTargetRotation(-1, true))
+        assertEquals(999, CameraRotationHelper.getTargetRotation(999, true))
+        assertEquals(-1, CameraRotationHelper.getTargetRotation(-1, false))
+        assertEquals(999, CameraRotationHelper.getTargetRotation(999, false))
     }
     
     @Test
@@ -67,34 +67,28 @@ class CameraRotationHelperTest {
     }
     
     @Test
-    fun `test getRotationCompensation for front camera with same rotations`() {
-        // When device and display have same rotation, base is 0, plus 270 compensation
-        assertEquals(270f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_0, true))
-        assertEquals(270f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_90, true))
-        assertEquals(270f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_180, Surface.ROTATION_180, true))
-        assertEquals(270f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_270, Surface.ROTATION_270, true))
+    fun `test getRotationCompensation for front camera always returns 180 degrees`() {
+        // Front camera now uses fixed 180 degree rotation like back camera
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_0, true))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_90, true))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_180, Surface.ROTATION_180, true))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_270, Surface.ROTATION_270, true))
     }
     
     @Test
     fun `test getRotationCompensation for front camera with different rotations`() {
-        // Device at 0, display at 90: base is 270, plus 270 = 540 % 360 = 180
+        // Front camera always returns 180 degrees regardless of rotation combination
         assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_90, true))
-        
-        // Device at 0, display at 180: base is 180, plus 270 = 450 % 360 = 90
-        assertEquals(90f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_180, true))
-        
-        // Device at 0, display at 270: base is 90, plus 270 = 360 % 360 = 0
-        assertEquals(0f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_270, true))
-        
-        // Device at 90, display at 0: base is 90, plus 270 = 360 % 360 = 0
-        assertEquals(0f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_0, true))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_180, true))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_270, true))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_0, true))
     }
     
     @Test
     fun `test getRotationCompensation handles invalid rotation values`() {
-        // Should return 0 for base rotation when invalid, plus compensation
-        assertEquals(270f, CameraRotationHelper.getRotationCompensation(-1, Surface.ROTATION_0, true))
-        assertEquals(270f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, -1, true))
+        // Should always return 180f for both cameras
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(-1, Surface.ROTATION_0, true))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, -1, true))
         assertEquals(180f, CameraRotationHelper.getRotationCompensation(-1, -1, false))
     }
     
@@ -110,41 +104,12 @@ class CameraRotationHelperTest {
             }
         }
         
-        // Test all combinations for front camera
-        val expectedResults = mapOf(
-            // Device ROTATION_0
-            Pair(Surface.ROTATION_0, Surface.ROTATION_0) to 270f,
-            Pair(Surface.ROTATION_0, Surface.ROTATION_90) to 180f,
-            Pair(Surface.ROTATION_0, Surface.ROTATION_180) to 90f,
-            Pair(Surface.ROTATION_0, Surface.ROTATION_270) to 0f,
-            // Device ROTATION_90
-            Pair(Surface.ROTATION_90, Surface.ROTATION_0) to 0f,
-            Pair(Surface.ROTATION_90, Surface.ROTATION_90) to 270f,
-            Pair(Surface.ROTATION_90, Surface.ROTATION_180) to 180f,
-            Pair(Surface.ROTATION_90, Surface.ROTATION_270) to 90f,
-            // Device ROTATION_180
-            Pair(Surface.ROTATION_180, Surface.ROTATION_0) to 90f,
-            Pair(Surface.ROTATION_180, Surface.ROTATION_90) to 0f,
-            Pair(Surface.ROTATION_180, Surface.ROTATION_180) to 270f,
-            Pair(Surface.ROTATION_180, Surface.ROTATION_270) to 180f,
-            // Device ROTATION_270
-            Pair(Surface.ROTATION_270, Surface.ROTATION_0) to 180f,
-            Pair(Surface.ROTATION_270, Surface.ROTATION_90) to 90f,
-            Pair(Surface.ROTATION_270, Surface.ROTATION_180) to 0f,
-            Pair(Surface.ROTATION_270, Surface.ROTATION_270) to 270f
-        )
-        
-        for ((rotationPair, expected) in expectedResults) {
-            val result = CameraRotationHelper.getRotationCompensation(
-                rotationPair.first, 
-                rotationPair.second, 
-                true
-            )
-            assertEquals(
-                "Device ${rotationPair.first}, Display ${rotationPair.second} should return $expected",
-                expected,
-                result
-            )
+        // Test all combinations for front camera (should always be 180)
+        for (deviceRotation in rotations) {
+            for (displayRotation in rotations) {
+                val result = CameraRotationHelper.getRotationCompensation(deviceRotation, displayRotation, true)
+                assertEquals("Front camera should always return 180 degrees", 180f, result)
+            }
         }
     }
 }

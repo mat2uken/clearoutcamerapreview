@@ -110,19 +110,28 @@ This is an Android application built with Kotlin and Jetpack Compose. The projec
 ```
 app/src/main/java/.../clearoutcamerapreview/
 ├── MainActivity.kt                    # Entry point, landscape orientation lock
-├── SimplifiedMultiDisplayCameraScreen.kt # Main camera screen with dual display
+├── SimplifiedMultiDisplayCameraScreen.kt # Main camera screen with dual display (1289 lines)
 ├── camera/
 │   └── CameraState.kt                # Immutable camera state management
+├── presentation/
+│   └── SimpleCameraPresentation.kt   # External display presentation (extracted)
+├── ui/
+│   ├── CameraDialogs.kt              # All camera dialog components (extracted)
+│   └── CameraSidebar.kt              # Sidebar UI components (extracted)
 ├── utils/
 │   ├── CameraUtils.kt                # Camera utilities (resolution, zoom, etc.)
 │   ├── CameraRotationHelper.kt       # Camera rotation calculation logic
 │   ├── DisplayUtils.kt               # External display detection
+│   ├── FrameRateUtils.kt             # Frame rate detection logic
 │   └── PresentationHelper.kt         # External display preview calculations
 ├── audio/
+│   ├── interfaces/
+│   │   └── AudioInterfaces.kt        # Audio abstraction interfaces for testing
 │   ├── AudioDeviceMonitor.kt         # Audio device detection and monitoring
 │   ├── AudioCaptureManager.kt        # Microphone capture and playback
 │   ├── AudioCoordinator.kt           # Coordinates audio based on device state
-│   └── AudioConfigurationHelper.kt   # Optimal audio configuration detection
+│   ├── AudioConfigurationHelper.kt   # Optimal audio configuration detection
+│   └── DefaultAudioComponentFactory.kt # Factory for creating audio components
 ├── data/
 │   ├── SettingsRepository.kt         # Settings management with Room database
 │   └── database/
@@ -204,20 +213,22 @@ app/src/main/java/.../clearoutcamerapreview/
 
 ### Testing
 - Unit tests are located in `app/src/test/`
-- 150+ unit tests covering all utility classes and helpers
+- 190 unit tests covering all utility classes and helpers
 - Test coverage approaches 100% for non-UI components
 - Test files:
   - `CameraUtilsTest.kt`: Camera utility functions (23 tests)
   - `CameraRotationHelperTest.kt`: Camera rotation logic (10 tests)
-  - `DisplayUtilsTest.kt`: Display detection logic (10 tests)
+  - `DisplayUtilsTest.kt`: Display detection logic (25 tests)
   - `CameraStateTest.kt`: State management (7 tests)
-  - `PresentationHelperTest.kt`: External display calculations (5 tests)
+  - `FrameRateUtilsTest.kt`: Frame rate detection logic (9 tests)
   - `AudioDeviceMonitorTest.kt`: Audio device detection (15 tests)
   - `AudioCaptureManagerIsolatedTest.kt`: Audio capture logic (9 tests)
   - `AudioCaptureManagerPermissionTest.kt`: Permission-specific tests (1 test)
   - `AudioCoordinatorTest.kt`: Audio coordination (12 tests)
   - `AudioConfigurationHelperTest.kt`: Audio configuration selection (15 tests)
   - `AudioDeviceSelectionTest.kt`: Audio output device selection (4 tests)
+  - `SettingsDaoTest.kt`: Database operations (8 tests)
+  - `CameraFormatTest.kt`: Camera format model (13 tests)
   - `SizeTest.kt`: Custom Size class tests (8 tests)
   - Additional test files for validation and logic testing
 - Use JUnit 4, MockK, and Robolectric for testing
@@ -266,12 +277,20 @@ app/src/main/java/.../clearoutcamerapreview/
 10. **Audio Output Selection**: Added dialog for manual audio output device selection
 11. **Settings Persistence**: Implemented Room database for saving user preferences
 12. **Camera Rotation Helper**: Extracted rotation logic for better testability
-13. **Test Coverage**: Expanded to 150+ tests with 100% success rate
+13. **Test Coverage**: Expanded to 190 tests with 100% success rate
 14. **Frame Rate Detection**: Added automatic detection of actual camera capture frame rate when not explicitly set
 15. **Camera Format Model**: Added CameraFormat data class to handle resolution and frame rate combinations
 16. **Camera-Display Settings**: Flip settings now stored per camera-display combination with DB migration
 17. **Sidebar Toggle UI**: Replaced tap-to-toggle with dedicated buttons and status bar aware positioning
 18. **Code Cleanup**: Removed 8 unused files, fixed deprecated API warnings, improved testability with FrameRateUtils extraction
+19. **Major Refactoring (June 2025)**:
+    - SimplifiedMultiDisplayCameraScreen reduced from 2075 to 1289 lines (38% reduction)
+    - Extracted SimpleCameraPresentation to separate file (presentation package)
+    - Extracted all dialogs to ui/CameraDialogs.kt
+    - Extracted sidebar components to ui/CameraSidebar.kt
+    - Added audio interfaces for improved testability (AudioRecordWrapper, AudioTrackWrapper)
+    - Removed unused DisplayManagerHelper class
+    - Fixed CameraRotationHelper tests to match current implementation
 
 ### Known Issues
 1. **AudioCoordinator crashes with external display** (December 2024) - **FIXED**:
