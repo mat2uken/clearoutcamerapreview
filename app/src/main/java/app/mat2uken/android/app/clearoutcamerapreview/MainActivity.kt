@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalPermissionsApi::class, androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun CameraPermissionScreen(audioCoordinator: AudioCoordinator) {
     val permissionsState = rememberMultiplePermissionsState(

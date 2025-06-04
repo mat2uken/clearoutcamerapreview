@@ -10,6 +10,9 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import android.util.Size
 import androidx.camera.core.AspectRatio
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import kotlin.math.abs
 import android.graphics.Matrix
 import kotlin.math.max
@@ -96,12 +99,32 @@ private fun getSupportedPreviewSizes(
     cameraSelector: CameraSelector
 ): List<Size> {
     return try {
-        val cameraInfo = cameraProvider.availableCameraInfos
-            .find { it.cameraSelector == cameraSelector }
+        // Find the camera info that matches the selector
+        val cameraInfos = cameraProvider.availableCameraInfos
+        Log.d(TAG, "Total available cameras: ${cameraInfos.size}")
+        
+        // Try different approaches to find the matching camera
+        val cameraInfo = cameraInfos.find { info ->
+            try {
+                val lensFacing = info.lensFacing
+                
+                // Match based on lens facing
+                when (cameraSelector) {
+                    CameraSelector.DEFAULT_BACK_CAMERA -> lensFacing == CameraSelector.LENS_FACING_BACK
+                    CameraSelector.DEFAULT_FRONT_CAMERA -> lensFacing == CameraSelector.LENS_FACING_FRONT
+                    else -> false
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error checking camera info", e)
+                false
+            }
+        }
         
         cameraInfo?.let { info ->
             val camera2Info = androidx.camera.camera2.interop.Camera2CameraInfo.from(info)
             val cameraId = camera2Info.cameraId
+            Log.d(TAG, "Using camera ID: $cameraId")
+            
             val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
             val characteristics = cameraManager.getCameraCharacteristics(cameraId)
             val streamConfigMap = characteristics.get(
@@ -130,8 +153,23 @@ private fun getSupportedCameraFormats(
     cameraSelector: CameraSelector
 ): List<app.mat2uken.android.app.clearoutcamerapreview.model.CameraFormat> {
     return try {
-        val cameraInfo = cameraProvider.availableCameraInfos
-            .find { it.cameraSelector == cameraSelector }
+        // Find the camera info that matches the selector
+        val cameraInfos = cameraProvider.availableCameraInfos
+        Log.d(TAG, "getSupportedCameraFormats - Total cameras: ${cameraInfos.size}")
+        
+        val cameraInfo = cameraInfos.find { info ->
+            try {
+                val lensFacing = info.lensFacing
+                when (cameraSelector) {
+                    CameraSelector.DEFAULT_BACK_CAMERA -> lensFacing == CameraSelector.LENS_FACING_BACK
+                    CameraSelector.DEFAULT_FRONT_CAMERA -> lensFacing == CameraSelector.LENS_FACING_FRONT
+                    else -> false
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error checking camera info in formats", e)
+                false
+            }
+        }
         
         cameraInfo?.let { info ->
             val camera2Info = androidx.camera.camera2.interop.Camera2CameraInfo.from(info)
@@ -370,6 +408,19 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                 
                 // Get supported camera formats with frame rate information
                 val supportedFormats = getSupportedCameraFormats(context, cameraProvider, cameraState.cameraSelector)
+                Log.d(TAG, "Total supported formats: ${supportedFormats.size}")
+                
+                // Log all available resolutions for debugging
+                supportedFormats.forEach { format ->
+                    Log.d(TAG, "Available format: ${format.size.width}x${format.size.height}")
+                }
+                
+                // Also get supported preview sizes for comparison
+                val supportedPreviewSizes = getSupportedPreviewSizes(context, cameraProvider, cameraState.cameraSelector)
+                Log.d(TAG, "Total supported preview sizes: ${supportedPreviewSizes.size}")
+                supportedPreviewSizes.forEach { size ->
+                    Log.d(TAG, "Available preview size: ${size.width}x${size.height}")
+                }
                 
                 // Select optimal format (resolution + frame rate)
                 val optimalFormat = CameraUtils.selectOptimalCameraFormat(supportedFormats)
@@ -383,6 +434,10 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                 } else {
                     // Fallback to resolution-only selection
                     val supportedSizes = getSupportedPreviewSizes(context, cameraProvider, cameraState.cameraSelector)
+                    Log.d(TAG, "Fallback - Total supported sizes: ${supportedSizes.size}")
+                    supportedSizes.forEach { size ->
+                        Log.d(TAG, "Fallback - Available size: ${size.width}x${size.height}")
+                    }
                     val targetResolution = selectOptimalResolution(supportedSizes)
                     selectedResolution = targetResolution
                     selectedFrameRateRange = null
@@ -396,14 +451,53 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                 val targetResolution = selectedResolution
                 
                 val preview = if (targetResolution != null) {
-                    val previewBuilder = Preview.Builder()
-                        .setTargetAspectRatio(
-                            if (targetResolution.width * 9 == targetResolution.height * 16) {
-                                AspectRatio.RATIO_16_9
-                            } else {
-                                AspectRatio.RATIO_4_3
+                    Log.d(TAG, "Creating preview with target resolution: ${targetResolution.width}x${targetResolution.height}, rotation: $rotation")
+                    
+                    // Create resolution selector with multiple strategies to force 1920x1080
+                    val resolutionSelector = ResolutionSelector.Builder()
+                        .setResolutionFilter { supportedSizes, _ ->
+                            Log.d(TAG, "ResolutionFilter called with ${supportedSizes.size} sizes: ${supportedSizes.joinToString { "${it.width}x${it.height}" }}")
+                            
+                            // Sort sizes by prioritizing 1920x1080
+                            val sortedSizes = supportedSizes.sortedWith { size1, size2 ->
+                                // 1920x1080 always wins
+                                if (size1.width == 1920 && size1.height == 1080) -1
+                                else if (size2.width == 1920 && size2.height == 1080) 1
+                                else (size2.width * size2.height).compareTo(size1.width * size1.height)
                             }
+                            
+                            // First, try to find exact match
+                            val exactMatch = sortedSizes.filter { size ->
+                                size.width == targetResolution.width && 
+                                size.height == targetResolution.height
+                            }
+                            
+                            if (exactMatch.isNotEmpty()) {
+                                Log.d(TAG, "Found exact match for ${targetResolution.width}x${targetResolution.height}")
+                                // Return only the exact match to force CameraX to use it
+                                exactMatch
+                            } else {
+                                // If no exact match but we want 1920x1080, check if it exists in a different form
+                                val has1080p = supportedSizes.any { it.width == 1920 && it.height == 1080 }
+                                if (has1080p) {
+                                    Log.w(TAG, "1920x1080 exists but wasn't matched. Returning all 1920x1080 entries.")
+                                    supportedSizes.filter { it.width == 1920 && it.height == 1080 }
+                                } else {
+                                    Log.w(TAG, "No 1920x1080 available, returning sorted sizes")
+                                    sortedSizes
+                                }
+                            }
+                        }
+                        .setResolutionStrategy(
+                            ResolutionStrategy(
+                                targetResolution,
+                                ResolutionStrategy.FALLBACK_RULE_NONE  // Use NONE to be strict
+                            )
                         )
+                        .build()
+                    
+                    val previewBuilder = Preview.Builder()
+                        .setResolutionSelector(resolutionSelector)
                         .setTargetRotation(targetRotation)
                     
                     // Apply frame rate range if available
@@ -422,15 +516,36 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                     
                     previewBuilder.build()
                         .also {
-                            Log.d(TAG, "Preview created with target aspect ratio for resolution: ${targetResolution.width}x${targetResolution.height}, rotation: $targetRotation, isFront: $isFront")
+                            Log.d(TAG, "Preview created with target resolution: ${targetResolution.width}x${targetResolution.height}, rotation: $targetRotation, isFront: $isFront")
                         }
                 } else {
+                    // Fallback to default 16:9 resolution if no specific resolution is selected
+                    val defaultResolutionSelector = ResolutionSelector.Builder()
+                        .setResolutionFilter { supportedSizes, _ ->
+                            // Prioritize 1920x1080 if available
+                            val has1080p = supportedSizes.filter { it.width == 1920 && it.height == 1080 }
+                            if (has1080p.isNotEmpty()) {
+                                Log.d(TAG, "Fallback: Found 1920x1080, using it exclusively")
+                                has1080p
+                            } else {
+                                Log.d(TAG, "Fallback: No 1920x1080, using all ${supportedSizes.size} sizes")
+                                supportedSizes
+                            }
+                        }
+                        .setResolutionStrategy(
+                            ResolutionStrategy(
+                                Size(1920, 1080),
+                                ResolutionStrategy.FALLBACK_RULE_NONE
+                            )
+                        )
+                        .build()
+                    
                     Preview.Builder()
-                        .setTargetAspectRatio(AspectRatio.RATIO_16_9)
+                        .setResolutionSelector(defaultResolutionSelector)
                         .setTargetRotation(targetRotation)
                         .build()
                         .also {
-                            Log.d(TAG, "Preview created with default 16:9 aspect ratio, rotation: $targetRotation, isFront: $isFront")
+                            Log.d(TAG, "Preview created with default 1920x1080 resolution, rotation: $targetRotation, isFront: $isFront")
                         }
                 }
                 
@@ -440,6 +555,7 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                     val resolution = surfaceRequest.resolution
                     actualPreviewSize = Size(resolution.width, resolution.height)
                     Log.d(TAG, "Actual preview size from surface request: ${resolution.width}x${resolution.height}")
+                    Log.d(TAG, "Requested resolution was: ${selectedResolution?.width}x${selectedResolution?.height}")
                     
                     // Set scale type based on camera type
                     mainPreviewView.scaleType = PreviewView.ScaleType.FIT_CENTER
@@ -564,14 +680,35 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                         val externalTargetRotation = CameraRotationHelper.getTargetRotation(rotation, isFrontCam)
                         
                         val previewBuilder = if (selectedResolution != null) {
-                            val builder = Preview.Builder()
-                                .setTargetAspectRatio(
-                                    if (selectedResolution!!.width * 9 == selectedResolution!!.height * 16) {
-                                        AspectRatio.RATIO_16_9
-                                    } else {
-                                        AspectRatio.RATIO_4_3
+                            // Create resolution selector with custom resolution filter
+                            val resolutionSelector = ResolutionSelector.Builder()
+                                .setResolutionFilter { supportedSizes, _ ->
+                                    Log.d(TAG, "External ResolutionFilter called with ${supportedSizes.size} sizes")
+                                    
+                                    // Try to find exact match
+                                    val exactMatch = supportedSizes.filter { size ->
+                                        size.width == selectedResolution!!.width && 
+                                        size.height == selectedResolution!!.height
                                     }
+                                    
+                                    if (exactMatch.isNotEmpty()) {
+                                        Log.d(TAG, "External display: Found exact match for ${selectedResolution!!.width}x${selectedResolution!!.height}")
+                                        exactMatch
+                                    } else {
+                                        Log.w(TAG, "External display: No exact match, using all sizes")
+                                        supportedSizes
+                                    }
+                                }
+                                .setResolutionStrategy(
+                                    ResolutionStrategy(
+                                        selectedResolution!!,
+                                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                                    )
                                 )
+                                .build()
+                            
+                            val builder = Preview.Builder()
+                                .setResolutionSelector(resolutionSelector)
                                 .setTargetRotation(externalTargetRotation)
                             
                             // Apply frame rate range if available
@@ -588,8 +725,18 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                             }
                             builder
                         } else {
+                            // Fallback to default 16:9 resolution
+                            val defaultResolutionStrategy = ResolutionStrategy(
+                                Size(1920, 1080),
+                                ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
+                            )
+                            
+                            val defaultResolutionSelector = ResolutionSelector.Builder()
+                                .setResolutionStrategy(defaultResolutionStrategy)
+                                .build()
+                            
                             Preview.Builder()
-                                .setTargetAspectRatio(AspectRatio.RATIO_16_9)
+                                .setResolutionSelector(defaultResolutionSelector)
                                 .setTargetRotation(externalTargetRotation)
                         }
                         

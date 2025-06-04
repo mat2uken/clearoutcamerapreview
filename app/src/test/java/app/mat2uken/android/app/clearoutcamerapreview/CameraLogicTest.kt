@@ -78,7 +78,6 @@ class CameraLogicTest {
         )
 
         var currentSelection = CameraSelector.DEFAULT_BACK_CAMERA
-        var isExpanded = false
 
         // Find current option
         val currentOption = options.find { it.second == currentSelection }?.first
