@@ -62,7 +62,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     - 上下反転、左右反転を独立して制御可能
 - 外部ディスプレイの検出機能
 - 横向き固定表示（landscape orientation）
-- オーバーレイサイドバーUI（タップで表示/非表示切り替え）
+- オーバーレイサイドバーUI
+  - 専用の折り畳みボタンで表示/非表示切り替え
+  - サイドバー右上の「>」ボタンで折り畳み
+  - 非表示時は右上に「<」ボタンを表示して再展開可能
+  - OSのステータスバーを考慮した位置調整
 - オーディオ機能
   - 外部スピーカー接続時に自動的にマイク録音開始
   - マイクからスピーカーへのオーディオパススルー
@@ -79,7 +83,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     - 出力デバイス選択機能（クリックして選択可能）
 - 設定の永続化
   - 下記の内容をローカルDBに対して設定変更時などで適切に保存して、次回起動時には同じ設定で起動できる
-    - 接続されたディスプレイを特定して、そのディスプレイが接続されている時の上下反転、左右反転の設定
+    - 外部ディスプレイとカメラの組み合わせごとの上下反転、左右反転の設定
+      - 各外部ディスプレイと各カメラ（前面/背面）の組み合わせで独立した設定を保持
+      - カメラ切り替え時に自動的に該当する設定を読み込み
     - 最後に選択されていたカメラの種別
     - カメラごとのズーム率
 
@@ -240,9 +246,12 @@ app/src/main/java/.../clearoutcamerapreview/
 ### UI Design
 - **Overlay Sidebar**: 280dp wide sidebar that overlays on camera preview
 - **Semi-transparent**: 95% opacity for subtle see-through effect
-- **Tap to Toggle**: Tap anywhere on camera preview to show/hide sidebar
+- **Dedicated Toggle Buttons**: 
+  - Collapse button (ChevronRight >) in sidebar header
+  - Expand button (ChevronLeft <) as floating button when hidden
+  - Status bar aware positioning to avoid OS UI overlap
 - **Modal Dialogs**: All controls open in centered modal dialogs
-- **Menu Icon**: Shows when sidebar is hidden to indicate toggle capability
+- **No Tap Interference**: Camera preview area doesn't respond to taps
 
 ### Recent Implementation Changes
 1. **Unit Test Infrastructure**: Extracted logic into testable utility classes
@@ -260,6 +269,8 @@ app/src/main/java/.../clearoutcamerapreview/
 13. **Test Coverage**: Expanded to 150+ tests with 100% success rate
 14. **Frame Rate Detection**: Added automatic detection of actual camera capture frame rate when not explicitly set
 15. **Camera Format Model**: Added CameraFormat data class to handle resolution and frame rate combinations
+16. **Camera-Display Settings**: Flip settings now stored per camera-display combination with DB migration
+17. **Sidebar Toggle UI**: Replaced tap-to-toggle with dedicated buttons and status bar aware positioning
 
 ### Test Device
 - Device IP: 192.168.0.238:5555

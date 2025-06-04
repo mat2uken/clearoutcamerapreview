@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material3.*
 import android.media.AudioDeviceInfo
 import androidx.compose.runtime.*
@@ -59,6 +61,9 @@ import app.mat2uken.android.app.clearoutcamerapreview.utils.CameraRotationHelper
 import app.mat2uken.android.app.clearoutcamerapreview.data.SettingsRepository
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.ui.platform.LocalDensity
 
 private const val TAG = "SimplifiedMultiDisplay"
 
@@ -189,6 +194,8 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val statusBarHeight = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
     
     // Get the current rotation
     val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -719,38 +726,31 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
         // Main camera preview (full screen)
         AndroidView(
             factory = { mainPreviewView },
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable { showSidebar = !showSidebar }
+            modifier = Modifier.fillMaxSize()
         )
         
-        // Top icons when sidebar is hidden
+        // Floating button when sidebar is hidden
         if (!showSidebar) {
-            Row(
+            Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(
+                        top = statusBarHeight + 16.dp,
+                        end = 16.dp
+                    )
             ) {
-                // Audio indicator
-                audioState?.let { state ->
-                    if (state.isCapturing) {
-                        Icon(
-                            imageVector = if (state.isMuted) Icons.Default.MicOff else Icons.Default.Mic,
-                            contentDescription = if (state.isMuted) "Audio muted" else "Audio recording active",
-                            modifier = Modifier.size(24.dp),
-                            tint = if (state.isMuted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
-                        )
-                    }
+                FloatingActionButton(
+                    onClick = { showSidebar = true },
+                    modifier = Modifier.size(48.dp),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ChevronLeft,
+                        contentDescription = "Show sidebar",
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
-                
-                // Menu icon
-                Icon(
-                    imageVector = Icons.Default.Menu,
-                    contentDescription = "Toggle sidebar",
-                    modifier = Modifier.size(32.dp),
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
             }
         }
         
@@ -764,7 +764,8 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
             Card(
                 modifier = Modifier
                     .width(280.dp)
-                    .fillMaxHeight(),
+                    .fillMaxHeight()
+                    .padding(top = statusBarHeight),
                 shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
@@ -776,17 +777,34 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                 ) {
-                // Header
+                // Header with collapse button
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
-                    Text(
-                        text = "Camera Settings",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(16.dp)
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Camera Settings",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(
+                            onClick = { showSidebar = false },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Hide sidebar",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
                 }
                 
                 Divider()
