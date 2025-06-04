@@ -1,16 +1,14 @@
 # ClearOut Camera Preview
 
-内蔵カメラの映像をフルスクリーンでプレビュー表示するAndroidアプリケーションです。外部ディスプレイへの同時出力、オーディオパススルー機能、詳細な設定管理機能を備えています。
+内蔵カメラの映像をフルスクリーンでプレビュー表示するAndroidアプリケーションです。外部ディスプレイへの同時出力、オーディオパススルーする機能を備えます。
 
 ## 📱 プロジェクトの概要
 
-このアプリは、Androidデバイスのカメラを使用して高品質な映像プレビューを提供します。主な特徴：
+このアプリは、Androidデバイスのカメラを使用して映像プレビューを提供します。主な特徴：
 
 - **1920x1080 解像度優先**: 利用可能な場合は常にフルHD解像度を選択
 - **デュアルディスプレイ対応**: 内蔵画面と外部ディスプレイへの同時出力
 - **オーディオパススルー**: 外部スピーカー接続時にマイクから音声を自動中継
-- **横向き固定表示**: 安定したランドスケープモードでの動作
-- **設定の永続化**: カメラやディスプレイの設定を自動保存・復元
 
 ## 🎯 アプリの利用方法・操作方法
 
@@ -89,19 +87,6 @@
 
 # Lintチェック
 ./gradlew lint
-```
-
-### ADBコマンド（デバッグ用）
-
-```bash
-# APKのインストール
-~/Library/Android/sdk/platform-tools/adb -s 192.168.0.137:5555 install -r app/build/outputs/apk/debug/app-debug.apk
-
-# アプリの起動
-~/Library/Android/sdk/platform-tools/adb -s 192.168.0.137:5555 shell am start -n app.mat2uken.android.app.clearoutcamerapreview/.MainActivity
-
-# ログの確認
-~/Library/Android/sdk/platform-tools/adb logcat | grep SimplifiedMultiDisplay
 ```
 
 ## 📁 ディレクトリ構成
@@ -223,12 +208,3 @@ adb logcat -v time | grep -E "SimplifiedMultiDisplay|CameraUtils|AudioCaptureMan
 ## 📝 ライセンス
 
 このプロジェクトのライセンスについては、LICENSEファイルを参照してください。
-
-## 🤝 貢献
-
-バグ報告や機能提案は、GitHubのIssuesページから行ってください。
-
-プルリクエストを送る前に：
-1. コードスタイルガイドラインに従ってください
-2. すべてのテストが通ることを確認してください
-3. 新機能の場合はテストを追加してください
