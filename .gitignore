@@ -31,3 +31,19 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# OS files
+.DS_Store
+
+# Debug files
+crash_log.txt
+bugreport*.txt
+bugreport*.zip
+dumpstate_log.txt
+main_entry.txt
+version.txt
+visible_windows.zip
+FS/
+lshal-debug/
+proto/
+app/release/
