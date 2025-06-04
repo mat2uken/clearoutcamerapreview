@@ -17,24 +17,12 @@ object CameraRotationHelper {
     
     /**
      * Calculate the target rotation for the preview
-     * Front camera needs different handling than back camera
+     * Both front and back cameras should use the same rotation
      */
     fun getTargetRotation(deviceRotation: Int, isFrontCamera: Boolean): Int {
-        return if (isFrontCamera) {
-            // Front camera sensor is typically oriented differently
-            // We need to compensate for the sensor orientation
-            when (deviceRotation) {
-                Surface.ROTATION_0 -> Surface.ROTATION_0
-                Surface.ROTATION_90 -> Surface.ROTATION_270  // Swap for front camera
-                Surface.ROTATION_180 -> Surface.ROTATION_180
-                Surface.ROTATION_270 -> Surface.ROTATION_90  // Swap for front camera
-                else -> Surface.ROTATION_0
-            }
-        } else {
-            // Back camera uses the device rotation directly without modification
-            // This was working correctly before
-            deviceRotation
-        }
+        // Use the device rotation directly for both cameras
+        // CameraX handles the sensor orientation differences internally
+        return deviceRotation
     }
     
     /**
@@ -82,13 +70,8 @@ object CameraRotationHelper {
             else -> 0f
         }
         
-        // For front camera, we need to compensate for the different sensor orientation
-        return if (isFrontCamera) {
-            // Front camera needs 270 degree compensation to fix the 90-degree clockwise rotation
-            (baseRotation + 270f) % 360f
-        } else {
-            // Back camera originally used 180 degree fixed rotation for external display
-            180f
-        }
+        // Both cameras need 180 degree rotation for external display
+        // This ensures the image appears correctly on external displays
+        return 180f
     }
 }

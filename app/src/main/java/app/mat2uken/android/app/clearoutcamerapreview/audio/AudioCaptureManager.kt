@@ -118,9 +118,14 @@ class AudioCaptureManager(
                 Log.e(TAG, "Invalid playback buffer size, using default: $playbackBufferSize")
             }
             
-            // Use larger buffers for better performance
-            recordBufferSize = max(recordBufferSize, config.sampleRate * config.channelCount / 10) // At least 100ms
-            playbackBufferSize = max(playbackBufferSize, config.sampleRate * config.channelCount / 10) // At least 100ms
+            // Use smaller buffers for lower latency
+            // Calculate minimum buffer size for low latency (aim for 20ms)
+            val targetLatencyMs = 20
+            val minLatencyBytes = (config.sampleRate * config.channelCount * 2 * targetLatencyMs) / 1000
+            
+            // Use the larger of minimum required size or target latency size
+            recordBufferSize = max(recordBufferSize, minLatencyBytes)
+            playbackBufferSize = max(playbackBufferSize, minLatencyBytes)
             
             Log.d(TAG, "Audio configuration - Sample rate: ${config.sampleRate}Hz, " +
                     "Channels: ${config.channelCount}, " +
@@ -147,8 +152,8 @@ class AudioCaptureManager(
             return
         }
         
-        if (_state.value.isCapturing) {
-            Log.w(TAG, "Audio capture already running")
+        if (_state.value.isCapturing || captureJob?.isActive == true) {
+            Log.w(TAG, "Audio capture already running or starting")
             return
         }
         
@@ -181,8 +186,15 @@ class AudioCaptureManager(
         
         // Initialize AudioRecord
         audioRecord = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // Use VOICE_RECOGNITION for lower latency on supported devices
+            val audioSource = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                MediaRecorder.AudioSource.VOICE_RECOGNITION
+            } else {
+                MediaRecorder.AudioSource.MIC
+            }
+            
             AudioRecord.Builder()
-                .setAudioSource(MediaRecorder.AudioSource.MIC)
+                .setAudioSource(audioSource)
                 .setAudioFormat(
                     AudioFormat.Builder()
                         .setSampleRate(config.sampleRate)
@@ -206,13 +218,17 @@ class AudioCaptureManager(
         // Initialize AudioTrack
         val outputChannelConfig = AudioConfigurationHelper.getOutputChannelConfig(config.channelCount)
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            AudioTrack.Builder()
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
+            val audioAttributesBuilder = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            
+            // Add low latency flag for API 24+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                audioAttributesBuilder.setFlags(AudioAttributes.FLAG_LOW_LATENCY)
+            }
+            
+            val trackBuilder = AudioTrack.Builder()
+                .setAudioAttributes(audioAttributesBuilder.build())
                 .setAudioFormat(
                     AudioFormat.Builder()
                         .setSampleRate(config.sampleRate)
@@ -222,6 +238,13 @@ class AudioCaptureManager(
                 )
                 .setBufferSizeInBytes(playbackBufferSize)
                 .setTransferMode(AudioTrack.MODE_STREAM)
+            
+            // Set performance mode for API 26+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                trackBuilder.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+            }
+            
+            trackBuilder
         } else {
             null
         }

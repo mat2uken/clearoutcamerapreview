@@ -69,6 +69,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.delay
 
 private const val TAG = "SimplifiedMultiDisplay"
 
@@ -291,8 +292,11 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
     val audioState by audioCoordinator?.audioState?.collectAsState() ?: remember { mutableStateOf(null) }
     
     // Load saved audio output device preference when audio coordinator is ready
-    LaunchedEffect(audioCoordinator, audioState?.hasExternalOutput) {
-        if (audioCoordinator != null && audioState?.hasExternalOutput == true) {
+    // Only run once when the component is first composed
+    LaunchedEffect(audioCoordinator) {
+        if (audioCoordinator != null) {
+            // Wait a bit for audio system to stabilize
+            delay(500)
             val savedDeviceId = settingsRepository.getAudioOutputDeviceId()
             savedDeviceId?.let { deviceId ->
                 val availableDevices = audioCoordinator.getAvailableOutputDevices().value
@@ -306,8 +310,8 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
     // Create a single preview view for the main display with proper aspect ratio
     val mainPreviewView = remember { 
         PreviewView(context).apply {
-            // Use PERFORMANCE mode for better performance
-            implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+            // Use default implementation mode for compatibility
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
             // Set scale type to FIT_CENTER to show full image with letterboxing
             scaleType = PreviewView.ScaleType.FIT_CENTER
         }
@@ -523,15 +527,28 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                         .setResolutionSelector(resolutionSelector)
                         .setTargetRotation(targetRotation)
                     
-                    // Apply frame rate range if available
+                    // Apply frame rate range and low latency settings if available
                     selectedFrameRateRange?.let { fpsRange ->
                         try {
                             val camera2Interop = androidx.camera.camera2.interop.Camera2Interop.Extender(previewBuilder)
+                            
+                            // Apply frame rate range
                             camera2Interop.setCaptureRequestOption(
                                 android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
                                 fpsRange
                             )
-                            Log.d(TAG, "Applied frame rate range: ${fpsRange.lower}-${fpsRange.upper} fps")
+                            
+                            // Apply low latency settings
+                            camera2Interop.setCaptureRequestOption(
+                                android.hardware.camera2.CaptureRequest.CONTROL_AE_MODE,
+                                android.hardware.camera2.CaptureRequest.CONTROL_AE_MODE_ON
+                            )
+                            camera2Interop.setCaptureRequestOption(
+                                android.hardware.camera2.CaptureRequest.CONTROL_AF_MODE,
+                                android.hardware.camera2.CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+                            )
+                            
+                            Log.d(TAG, "Applied frame rate range: ${fpsRange.lower}-${fpsRange.upper} fps with low latency settings")
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to apply frame rate range", e)
                         }
@@ -754,13 +771,25 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                                 .setResolutionSelector(resolutionSelector)
                                 .setTargetRotation(externalTargetRotation)
                             
-                            // Apply frame rate range if available
+                            // Apply frame rate range and low latency settings if available
                             selectedFrameRateRange?.let { fpsRange ->
                                 try {
                                     val camera2Interop = androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
+                                    
+                                    // Apply frame rate range
                                     camera2Interop.setCaptureRequestOption(
                                         android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
                                         fpsRange
+                                    )
+                                    
+                                    // Apply low latency settings
+                                    camera2Interop.setCaptureRequestOption(
+                                        android.hardware.camera2.CaptureRequest.CONTROL_AE_MODE,
+                                        android.hardware.camera2.CaptureRequest.CONTROL_AE_MODE_ON
+                                    )
+                                    camera2Interop.setCaptureRequestOption(
+                                        android.hardware.camera2.CaptureRequest.CONTROL_AF_MODE,
+                                        android.hardware.camera2.CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO
                                     )
                                 } catch (e: Exception) {
                                     Log.e(TAG, "Failed to apply frame rate range for external display", e)
@@ -1343,6 +1372,7 @@ class SimpleCameraPresentation(
             
             // Create PreviewView
             previewView = PreviewView(context).apply {
+                // Use default implementation mode for compatibility
                 implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                 // Start with FIT_CENTER to ensure no cropping
                 scaleType = PreviewView.ScaleType.FIT_CENTER

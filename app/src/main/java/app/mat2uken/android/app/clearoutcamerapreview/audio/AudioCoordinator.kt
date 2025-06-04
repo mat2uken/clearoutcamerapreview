@@ -64,6 +64,12 @@ class AudioCoordinator(private val context: Context) {
     fun start() {
         Log.d(TAG, "Starting audio coordinator")
         
+        // Prevent multiple starts
+        if (monitoringJob?.isActive == true) {
+            Log.w(TAG, "Audio coordinator already started, ignoring start request")
+            return
+        }
+        
         try {
             // Start device monitoring
             audioDeviceMonitor.startMonitoring()

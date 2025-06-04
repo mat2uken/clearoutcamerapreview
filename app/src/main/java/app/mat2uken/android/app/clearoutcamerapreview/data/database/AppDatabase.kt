@@ -67,6 +67,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "clearout_camera_database"
                 )
                 .addMigrations(MIGRATION_1_2)
+                .fallbackToDestructiveMigration() // Allow destructive migration for version downgrade
                 .build()
                 INSTANCE = instance
                 instance
