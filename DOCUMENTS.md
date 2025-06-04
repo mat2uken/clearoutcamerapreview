@@ -1,343 +1,308 @@
-# Clear Out Camera Preview - Technical Documentation
+# ClearOut Camera Preview - Technical Documentation
 
-## 概要 / Overview
-このアプリは、Android端末の内蔵カメラを使用してリアルタイムで映像をプレビューする機能を提供します。ユーザーはカメラの切り替えやズーム調整を行いながら、フルスクリーンでカメラ映像を確認できます。さらに、外部ディスプレイが接続されている場合は、端末画面と外部ディスプレイの両方に同時にカメラ映像を表示することができます。
+## 目次
+1. [概要](#概要)
+2. [アーキテクチャ](#アーキテクチャ)
+3. [主要コンポーネント](#主要コンポーネント)
+4. [設定の永続化](#設定の永続化)
+5. [外部ディスプレイサポート](#外部ディスプレイサポート)
+6. [オーディオシステム](#オーディオシステム)
+7. [UI/UXデザイン](#uiuxデザイン)
+8. [テスト戦略](#テスト戦略)
+9. [ビルドとデプロイ](#ビルドとデプロイ)
 
-This application provides real-time camera preview functionality using Android device's built-in camera. Users can view camera feed in fullscreen while switching cameras and adjusting zoom. When an external display is connected, the camera preview is shown simultaneously on both device screen and external display.
+## 概要
 
-## 動作環境 / System Requirements
-- **最小SDK / Min SDK**: Android 12 (API Level 31)
-- **ターゲットSDK / Target SDK**: Android 15 (API Level 35)
-- **開発言語 / Language**: Kotlin 1.9.0
-- **UIフレームワーク / UI Framework**: Jetpack Compose (Material 3)
-- **Javaバージョン / Java Version**: Java 11
-- **ビルドシステム / Build System**: Gradle 8.7 (Kotlin DSL)
-- **画面向き / Orientation**: 横向き固定 (Landscape only)
+ClearOut Camera Previewは、Androidデバイスの内蔵カメラ映像をリアルタイムでプレビューし、外部ディスプレイへの同時出力をサポートするアプリケーションです。
 
-## 主要機能 / Key Features
+### 主な機能
+- カメラ映像のリアルタイムプレビュー（内蔵ディスプレイ・外部ディスプレイ同時）
+- 前面/背面カメラの切り替え
+- ズーム機能（カメラハードウェアの範囲内）
+- 外部ディスプレイ映像の手動反転（上下・左右独立制御）
+- 外部スピーカー接続時の自動オーディオパススルー
+- 設定の永続化（Room database使用）
+- 横向き固定表示
 
-### 1. カメラプレビュー / Camera Preview
-- アプリ起動時にカメラを自動的に初期化
-- カメラからキャプチャした映像をリアルタイムでフルスクリーン表示
-- CameraXライブラリを使用した高性能なカメラ制御
-- 横向き固定表示（両方向のlandscapeに対応）
+## アーキテクチャ
 
-### 2. ズーム機能 / Zoom Control
-- 各デバイスのハードウェアがサポートする最小・最大ズーム率を自動取得
-- モーダルダイアログによる直感的なズーム調整
-- 現在のズーム倍率をリアルタイム表示（例: 1.0x, 2.5x）
-- ズーム範囲はデバイスのカメラ性能に依存
+### 技術スタック
+- **言語**: Kotlin 1.9.0
+- **UI**: Jetpack Compose with Material 3
+- **カメラ**: CameraX 1.3.4
+- **オーディオ**: Android AudioRecord/AudioTrack APIs
+- **データベース**: Room 2.6.1 with KSP
+- **最小SDK**: 31 (Android 12)
+- **ターゲットSDK**: 35 (Android 15)
 
-### 3. カメラ切り替え / Camera Switching
-- モーダルダイアログによるカメラ選択機能
-- 対応カメラ:
-  - 背面カメラ（Back Camera）
-  - 前面カメラ（Front Camera）
-- カメラ切り替え時は自動的にプレビューを再初期化
-- 前面/背面カメラで異なる回転補正を適用
+### レイヤー構造
 
-### 4. 外部ディスプレイ対応 / External Display Support
-- 外部ディスプレイの自動検出
-- 接続時に端末画面と外部ディスプレイの両方にカメラ映像を同時表示
-- 外部ディスプレイでもフルスクリーン表示
-- ディスプレイの接続/切断を自動検知して表示を更新
-- ステータス表示で外部ディスプレイの接続状態を確認可能
-- 映像の手動反転機能（上下反転・左右反転を独立制御）
-
-### 5. オーバーレイサイドバーUI / Overlay Sidebar UI
-- カメラプレビューの上に重ねて表示される半透明サイドバー
-- タップで表示/非表示の切り替え
-- すべての設定をモーダルダイアログで操作
-- メニューアイコンでサイドバーの存在を示唆
-
-### 6. オーディオパススルー機能 / Audio Passthrough
-- 外部スピーカー接続時に自動的にマイク録音を開始
-- マイクからの音声を外部スピーカーへリアルタイム出力
-- オーディオ設定:
-  - サンプルレート優先度: 48kHz > 44.1kHz > 最高利用可能
-  - 16ビット深度 (PCM)
-  - ステレオ対応（デバイスがサポートする場合、それ以外はモノラル）
-  - 内部スピーカーのみの場合は自動ミュート
-- UI表示機能:
-  - マイクデバイス名とオーディオフォーマット表示
-  - 出力デバイス情報表示
-  - ミュート切り替えコントロール（手動/自動）
-  - 出力デバイス選択ダイアログ（利用可能なデバイスから選択）
-
-## 技術仕様 / Technical Specifications
-
-### 依存ライブラリ / Dependencies
-- **CameraX**: 1.3.4
-  - camera-core
-  - camera-camera2
-  - camera-lifecycle
-  - camera-view
-- **Accompanist Permissions**: 0.32.0（権限管理用）
-- **Jetpack Compose BOM**: 2024.04.01
-- **AndroidX Core KTX**: 1.16.0
-- **AndroidX Lifecycle Runtime KTX**: 2.9.0
-- **AndroidX Activity Compose**: 1.10.1
-
-### テスト用依存ライブラリ / Test Dependencies
-- **JUnit**: 4.13.2
-- **MockK**: 1.13.8
-- **Kotlinx Coroutines Test**: 1.7.3
-- **AndroidX Arch Core Testing**: 2.2.0
-- **Robolectric**: 4.11.1
-
-### 必要な権限 / Required Permissions
-```xml
-<uses-permission android:name="android.permission.CAMERA" />
-<uses-permission android:name="android.permission.RECORD_AUDIO" />
-<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-<uses-feature android:name="android.hardware.camera" android:required="true" />
-<uses-feature android:name="android.hardware.camera.autofocus" />
+```
+Presentation Layer (Compose UI)
+    ↓
+Domain Layer (State Management & Business Logic)
+    ↓
+Data Layer (Repository & Database)
+    ↓
+Infrastructure Layer (Camera, Audio, Display APIs)
 ```
 
-### アーキテクチャ / Architecture
+## 主要コンポーネント
 
-#### 主要コンポーネント / Key Components
-- **MainActivity**: アプリのエントリーポイント、権限管理、横向き設定
-- **SimplifiedMultiDisplayCameraScreen**: メインカメラ画面（外部ディスプレイ対応）
-- **SimpleCameraPresentation**: 外部ディスプレイ用のPresentation実装
-- **CameraState**: イミュータブルなカメラ状態管理
-- **Utility Classes**:
-  - CameraUtils: カメラ関連の計算処理
-  - DisplayUtils: 外部ディスプレイ検出
-  - PresentationHelper: 外部ディスプレイ表示計算
-- **UI Components**:
-  - SidebarSection: サイドバーのセクションヘッダー
-  - StatusRow: 読み取り専用の状態表示
-  - ClickableRow: クリック可能な設定行
-  - Modal Dialogs: カメラ選択、ズーム調整、反転制御
+### 1. MainActivity
+アプリケーションのエントリーポイント。横向き固定とパーミッション管理を担当。
 
-#### ファイル構成 / File Structure
-```
-app/src/main/java/app/mat2uken/android/app/clearoutcamerapreview/
-├── MainActivity.kt                          # メインアクティビティ
-├── SimplifiedMultiDisplayCameraScreen.kt    # メインカメラ画面
-├── camera/
-│   └── CameraState.kt                      # カメラ状態管理
-├── utils/
-│   ├── CameraUtils.kt                      # カメラユーティリティ
-│   ├── DisplayUtils.kt                     # ディスプレイ検出
-│   └── PresentationHelper.kt               # 外部表示計算
-├── audio/
-│   ├── AudioDeviceMonitor.kt               # オーディオデバイス監視
-│   ├── AudioCaptureManager.kt              # 録音・再生管理
-│   ├── AudioCoordinator.kt                 # オーディオ統合制御
-│   └── AudioConfigurationHelper.kt         # 最適オーディオ設定検出
-├── model/
-│   └── Size.kt                             # テスト用Sizeクラス
-└── ui/theme/                               # テーマ関連
-    ├── Color.kt
-    ├── Theme.kt
-    └── Type.kt
-```
-
-## UI構成 / UI Design
-
-### 画面レイアウト / Screen Layout
-1. **背景**: カメラプレビュー（フルスクリーン）
-2. **オーバーレイサイドバー**（右側、280dp幅）:
-   - 半透明背景（95%不透明度）
-   - スクロール可能なコンテンツ
-   - セクション構成:
-     - Display Status（接続状態）
-     - Audio Status（外部オーディオ接続、録音状態）
-     - Microphone（デバイス名、フォーマット）
-     - Audio Output（デバイス選択、ミュート制御）
-     - Camera Information（解像度、アスペクト比）
-     - Camera Controls（カメラ選択、ズーム）
-     - External Display（反転制御）
-
-### モーダルダイアログ / Modal Dialogs
-- **カメラ選択**: ラジオボタンで前面/背面を選択
-- **ズーム調整**: スライダーでズーム倍率を調整
-- **反転制御**: スイッチで上下/左右反転を切り替え
-- **オーディオ出力選択**: 利用可能なデバイスから選択（ラジオボタン）
-
-### 権限処理 / Permission Handling
-- 初回起動時にカメラとマイク権限をリクエスト
-- 権限が拒否された場合は説明メッセージを表示
-- 権限が許可されるまでカメラプレビューは表示されない
-- オーディオ機能はマイク権限が必要
-
-## 実装の詳細 / Implementation Details
-
-### 解像度選択アルゴリズム / Resolution Selection
 ```kotlin
-fun selectOptimalResolution(availableSizes: List<Size>): Size? {
-    // 1. 1920x1080を優先
-    val fullHd = availableSizes.find { 
-        it.width == 1920 && it.height == 1080 
-    }
-    if (fullHd != null) return fullHd
-    
-    // 2. 16:9に最も近いアスペクト比を選択
-    return availableSizes
-        .filter { it.width > 0 && it.height > 0 }
-        .minByOrNull { 
-            abs(it.width.toFloat() / it.height - 16f / 9f) 
-        }
+requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+```
+
+### 2. SimplifiedMultiDisplayCameraScreen
+メインの画面コンポーザブル。すべてのUI要素とビジネスロジックを統合。
+
+主な責務：
+- カメラプレビューの管理
+- 外部ディスプレイの検出と管理
+- 設定の保存/復元
+- UIイベントの処理
+
+### 3. CameraState
+イミュータブルなカメラ状態管理。
+
+```kotlin
+data class CameraState(
+    val cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
+    val zoomRatio: Float = 1.0f,
+    val minZoomRatio: Float = 1.0f,
+    val maxZoomRatio: Float = 1.0f,
+    val isExternalDisplayConnected: Boolean = false,
+    val externalDisplayId: Int? = null
+)
+```
+
+### 4. CameraRotationHelper
+カメラの回転計算ロジックを分離したユーティリティ。
+
+```kotlin
+object CameraRotationHelper {
+    fun isFrontCamera(cameraSelector: CameraSelector): Boolean
+    fun getTargetRotation(deviceRotation: Int, isFrontCamera: Boolean): Int
+    fun getRotationCompensation(deviceRotation: Int, isFrontCamera: Boolean): Int
 }
 ```
 
-### 回転制御 / Rotation Handling
-前面カメラと背面カメラで異なる回転ロジック:
-- **前面カメラ**: 270度の補正を適用
-- **背面カメラ**: 外部ディスプレイでは固定180度回転
+## 設定の永続化
 
-### 反転機能 / Flip Transformation
+### Room Database構造
+
+#### エンティティ
+
+1. **DisplaySettings**
 ```kotlin
-private fun applyFlipTransformation() {
-    val scaleX = if (isHorizontallyFlipped) -1f else 1f
-    val scaleY = if (isVerticallyFlipped) -1f else 1f
-    
-    previewView.scaleX = scaleX
-    previewView.scaleY = scaleY
+@Entity(tableName = "display_settings")
+data class DisplaySettings(
+    @PrimaryKey val displayId: String,
+    val isVerticallyFlipped: Boolean = false,
+    val isHorizontallyFlipped: Boolean = false,
+    val displayName: String = ""
+)
+```
+
+2. **CameraSettings**
+```kotlin
+@Entity(tableName = "camera_settings")
+data class CameraSettings(
+    @PrimaryKey val cameraId: String,
+    val zoomRatio: Float = 1.0f,
+    val minZoomRatio: Float = 1.0f,
+    val maxZoomRatio: Float = 1.0f
+)
+```
+
+3. **AppSettings**
+```kotlin
+@Entity(tableName = "app_settings")
+data class AppSettings(
+    @PrimaryKey val id: Int = 1,
+    val lastSelectedCamera: String = "back",
+    val audioOutputDeviceId: Int? = null
+)
+```
+
+### SettingsRepository
+設定操作の中央管理リポジトリ。
+
+主な機能：
+- 初回起動時のデータベース初期化
+- 設定の保存（suspend functions）
+- 設定の読み込み（Flow対応）
+- 自動保存トリガー
+
+## 外部ディスプレイサポート
+
+### DisplayUtils
+外部ディスプレイの検出ロジック。
+
+```kotlin
+object DisplayUtils {
+    fun findExternalDisplay(displays: Array<Display>): Display?
+    fun isExternalDisplay(display: Display): Boolean
 }
 ```
 
-### オーディオ実装 / Audio Implementation
+### SimpleCameraPresentation
+外部ディスプレイ用のPresentation実装。
 
-#### デバイス検出 / Device Detection
-外部オーディオデバイスの接続を自動検出:
-```kotlin
-private fun isExternalAudioDevice(device: AudioDeviceInfo): Boolean {
-    return when (device.type) {
-        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
-        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> false
-        
-        AudioDeviceInfo.TYPE_WIRED_HEADSET,
-        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-        AudioDeviceInfo.TYPE_HDMI,
-        AudioDeviceInfo.TYPE_USB_DEVICE -> true
-        
-        else -> true // Unknown devices treated as external
-    }
-}
-```
+機能：
+- アスペクト比の自動調整
+- 回転補正
+- 反転変換サポート
+- 16:9アスペクト比の維持
 
-#### オーディオキャプチャ設定 / Audio Capture Configuration
-- サンプルレート優先順位:
-  1. 48kHz（推奨）
-  2. 44.1kHz（標準）
-  3. デバイスがサポートする最高サンプルレート
-- オーディオフォーマット: 16-bit PCM
-- チャンネル: ステレオ（サポートされている場合）、それ以外はモノラル
-- バッファサイズ: 自動計算（最小100ms）
-- 出力デバイス選択: Android API 23以上でpreferredDevice APIを使用
+### 解像度選択ロジック
+1. 1920x1080を優先
+2. 16:9アスペクト比の解像度を選択
+3. 最も近いアスペクト比にフォールバック
 
-#### リアルタイム処理 / Real-time Processing
-```kotlin
-// メインループ
-while (isActive && state.isCapturing) {
-    val bytesRead = audioRecord?.read(buffer, 0, buffer.size) ?: 0
-    if (bytesRead > 0) {
-        audioTrack?.write(buffer, 0, bytesRead)
-    }
-    yield()
-}
-```
+## オーディオシステム
 
-## テスト / Testing
+### AudioCoordinator
+オーディオシステム全体の調整役。
 
-### ユニットテスト構成 / Unit Test Structure
-- **CameraUtilsTest**: 14テスト（解像度選択、ズーム計算、アスペクト比）
-- **DisplayUtilsTest**: 15テスト（ディスプレイ検出ロジック）
-- **CameraStateTest**: 18テスト（状態管理、イミュータブル更新）
-- **PresentationHelperTest**: 28テスト（外部ディスプレイ計算）
-- **AudioDeviceMonitorTest**: 10テスト（オーディオデバイス検出）
-- **AudioCaptureManagerTest**: 6テスト（録音・再生管理）
-- **AudioCoordinatorTest**: 4テスト（オーディオ統合制御）
-- **AudioConfigurationHelperTest**: 3テスト（オーディオ設定選択）
-- **AudioDeviceSelectionTest**: 4テスト（出力デバイス選択）
+責務：
+- 外部オーディオデバイスの検出
+- オーディオキャプチャの自動開始/停止
+- オーディオ状態の統合管理
 
-合計100以上のユニットテストでビジネスロジックをカバー
+### AudioDeviceMonitor
+リアルタイムでオーディオデバイスを監視。
 
-### テスト実行 / Running Tests
+機能：
+- 利用可能なデバイスのリスト管理
+- デバイス接続/切断の検出
+- デバイス名の取得
+
+### AudioCaptureManager
+マイクキャプチャとスピーカー再生を管理。
+
+特徴：
+- 低遅延オーディオパススルー
+- 手動/自動ミュート制御
+- preferredDevice APIによるデバイス選択
+
+### AudioConfigurationHelper
+最適なオーディオ設定を決定。
+
+優先順位：
+1. 48kHz
+2. 44.1kHz
+3. 最高利用可能サンプルレート
+
+## UI/UXデザイン
+
+### オーバーレイサイドバー
+- 幅: 280dp
+- 透明度: 95%（半透明効果）
+- タップで表示/非表示切り替え
+
+### モーダルダイアログ
+すべてのコントロールはモーダルダイアログで実装：
+- CameraSelectionDialog
+- ZoomControlDialog
+- FlipControlDialog
+- AudioOutputSelectionDialog
+
+### UI構成要素
+- **SidebarSection**: セクションヘッダー
+- **StatusRow**: 読み取り専用ステータス表示
+- **ClickableRow**: クリック可能な設定行
+- **MuteControlRow**: ミュートトグル
+
+## テスト戦略
+
+### ユニットテスト
+- 150以上のテスト
+- 100%の成功率
+- MockKとRobolectricを使用
+
+### テストカテゴリ
+
+1. **ユーティリティテスト**
+   - CameraUtilsTest (23)
+   - CameraRotationHelperTest (10)
+   - DisplayUtilsTest (10)
+
+2. **状態管理テスト**
+   - CameraStateTest (7)
+   - SizeTest (8)
+
+3. **オーディオテスト**
+   - AudioDeviceMonitorTest (15)
+   - AudioCaptureManagerIsolatedTest (9)
+   - AudioCoordinatorTest (12)
+   - AudioConfigurationHelperTest (15)
+
+### MockK静的モッキングの課題
+複数のテストファイルに分離して解決：
+- AudioCaptureManagerIsolatedTest
+- AudioCaptureManagerPermissionTest
+
+## ビルドとデプロイ
+
+### ビルドコマンド
 ```bash
-# 全てのユニットテストを実行
-./gradlew test
-
-# 特定のテストクラスを実行
-./gradlew test --tests "*CameraUtilsTest"
-
-# カバレッジレポート生成
-./gradlew testDebugUnitTest jacocoTestReport
-```
-
-## ビルド・実行方法 / Build & Run
-
-### ビルド / Build
-```bash
-# プロジェクトのクリーン
-./gradlew clean
-
 # デバッグビルド
 ./gradlew assembleDebug
 
 # リリースビルド
 ./gradlew assembleRelease
+
+# テスト実行
+./gradlew test
 ```
 
-### インストール・実行 / Install & Run
+### デバイスへのインストール
 ```bash
-# デバイスへのインストール
-./gradlew installDebug
-
-# アプリの起動
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n app.mat2uken.android.app.clearoutcamerapreview/.MainActivity
 ```
 
-## トラブルシューティング / Troubleshooting
+### ProGuard設定
+現在はリリースビルドでProGuardは無効化されています。
 
-### よくある問題 / Common Issues
+## 今後の拡張ポイント
+
+1. **録画機能の追加**
+   - MediaRecorder APIの統合
+   - 外部ストレージへの保存
+
+2. **ネットワークストリーミング**
+   - RTMP/WebRTCサポート
+   - リモートプレビュー機能
+
+3. **画像処理フィルター**
+   - リアルタイムエフェクト
+   - カラー調整
+
+4. **マルチカメラサポート**
+   - 同時複数カメラプレビュー
+   - ピクチャーインピクチャー
+
+## トラブルシューティング
+
+### よくある問題
 
 1. **外部ディスプレイが検出されない**
-   - HDMI接続を確認
-   - DisplayのPresentationフラグをチェック
-   - logcatでDisplayManagerイベントを監視
+   - DisplayManagerの権限確認
+   - HDMIアダプターの互換性確認
 
-2. **カメラの回転問題**
-   - 前面カメラ: 270度補正を使用
-   - 背面カメラ: 外部ディスプレイでは180度固定
-   - デバイス回転: sensorLandscapeで処理
+2. **オーディオが再生されない**
+   - RECORD_AUDIO権限の確認
+   - オーディオデバイスの接続状態確認
 
-3. **プレビューのアスペクト比**
-   - 16:9ディスプレイを想定
-   - 異なる比率にはレターボックスを適用
-   - 1920x1080を優先的に選択
+3. **カメラプレビューが回転している**
+   - デバイスの向きセンサーの確認
+   - CameraRotationHelperのロジック確認
 
-4. **サイドバーが表示されない**
-   - カメラプレビューをタップ
-   - 右上のメニューアイコンを確認
-   - タッチイベントの伝播を確認
+## ライセンスと著作権
 
-5. **オーディオが機能しない**
-   - マイク権限を確認
-   - 外部スピーカーの接続を確認
-   - AudioManagerイベントをlogcatで監視
-   - オーディオデバイスの種類を確認
-
-### デバッグ用ログタグ / Debug Log Tags
-- `SimplifiedMultiDisplay`: メインカメラ操作
-- `DisplayUtils`: 外部ディスプレイ検出
-- `CameraUtils`: 解像度選択
-- `Presentation`: 外部ディスプレイレンダリング
-- `AudioDeviceMonitor`: オーディオデバイス検出
-- `AudioCaptureManager`: 録音・再生管理
-- `AudioCoordinator`: オーディオ統合制御
-- `AudioConfigurationHelper`: オーディオ設定選択
-
-## 今後の拡張可能性 / Future Enhancements
-- 写真撮影機能
-- 動画録画機能
-- ジェスチャーによるズーム操作
-- 設定の永続化
-- カスタムアスペクト比サポート
-- 複数の外部ディスプレイ対応
-- オーディオエフェクト（エコーキャンセル、ノイズ抑制）
-- オーディオ録音機能
-- Bluetooth LEオーディオ対応
+このプロジェクトの詳細なライセンス情報については、プロジェクトルートのLICENSEファイルを参照してください。

@@ -56,6 +56,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import app.mat2uken.android.app.clearoutcamerapreview.audio.AudioCoordinator
 import app.mat2uken.android.app.clearoutcamerapreview.utils.CameraRotationHelper
+import app.mat2uken.android.app.clearoutcamerapreview.data.SettingsRepository
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 
@@ -125,15 +126,27 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
     val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     val rotation = windowManager.defaultDisplay.rotation
     
+    // Settings repository
+    val settingsRepository = remember { SettingsRepository(context) }
+    
     // Camera state
     var camera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
     var cameraState by remember { mutableStateOf(CameraState()) }
+    
+    // Initialize settings
+    LaunchedEffect(Unit) {
+        settingsRepository.initialize()
+        // Load last selected camera
+        val lastCamera = settingsRepository.getLastSelectedCamera()
+        cameraState = cameraState.copy(cameraSelector = lastCamera)
+    }
     var selectedResolution by remember { mutableStateOf<Size?>(null) }
     var actualPreviewSize by remember { mutableStateOf<Size?>(null) }
     
     // External display flip states
     var isVerticallyFlipped by remember { mutableStateOf(false) }
     var isHorizontallyFlipped by remember { mutableStateOf(false) }
+    var currentDisplayId by remember { mutableStateOf<String?>(null) }
     
     // Display management
     val displayManager = remember { context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager }
@@ -151,6 +164,19 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
     
     // Audio state
     val audioState by audioCoordinator?.audioState?.collectAsState() ?: remember { mutableStateOf(null) }
+    
+    // Load saved audio output device preference when audio coordinator is ready
+    LaunchedEffect(audioCoordinator, audioState?.hasExternalOutput) {
+        if (audioCoordinator != null && audioState?.hasExternalOutput == true) {
+            val savedDeviceId = settingsRepository.getAudioOutputDeviceId()
+            savedDeviceId?.let { deviceId ->
+                val availableDevices = audioCoordinator.getAvailableOutputDevices().value
+                availableDevices.find { it.id == deviceId }?.let { device ->
+                    audioCoordinator.setOutputDevice(device)
+                }
+            }
+        }
+    }
     
     // Create a single preview view for the main display with proper aspect ratio
     val mainPreviewView = remember { 
@@ -171,6 +197,18 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
             connected = external != null,
             displayId = external?.displayId
         )
+        
+        // Load display settings if external display is found
+        external?.let { display ->
+            val displayId = display.displayId.toString()
+            currentDisplayId = displayId
+            coroutineScope.launch {
+                val displaySettings = settingsRepository.getDisplaySettings(displayId)
+                isVerticallyFlipped = displaySettings.isVerticallyFlipped
+                isHorizontallyFlipped = displaySettings.isHorizontallyFlipped
+            }
+        }
+        
         Log.d(TAG, "Checked displays. External display ${if (external != null) "found" else "not found"}")
     }
     
@@ -304,6 +342,26 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                         zoomState.minZoomRatio,
                         zoomState.maxZoomRatio
                     ).updateZoomRatio(zoomState.zoomRatio)
+                    
+                    // Load saved zoom settings
+                    coroutineScope.launch {
+                        val savedSettings = settingsRepository.getCameraSettings(cameraState.cameraSelector)
+                        val savedZoom = if (savedSettings.cameraId.isNotEmpty()) {
+                            // Use saved zoom if within current bounds
+                            savedSettings.zoomRatio.coerceIn(zoomState.minZoomRatio, zoomState.maxZoomRatio)
+                        } else {
+                            zoomState.zoomRatio
+                        }
+                        
+                        if (savedZoom != zoomState.zoomRatio) {
+                            try {
+                                cam.cameraControl.setZoomRatio(savedZoom)
+                                cameraState = cameraState.updateZoomRatio(savedZoom)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to restore saved zoom", e)
+                            }
+                        }
+                    }
                 }
                 
                 Log.d(TAG, "Camera bound successfully")
@@ -656,6 +714,10 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
             currentSelector = cameraState.cameraSelector,
             onSelectorChanged = { newSelector ->
                 cameraState = cameraState.copy(cameraSelector = newSelector)
+                // Save the selected camera
+                coroutineScope.launch {
+                    settingsRepository.updateLastSelectedCamera(newSelector)
+                }
                 showCameraDialog = false
             },
             onDismiss = { showCameraDialog = false }
@@ -674,6 +736,13 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                     coroutineScope.launch {
                         try {
                             cam.cameraControl.setZoomRatio(newZoom)
+                            // Save zoom settings
+                            settingsRepository.updateCameraZoom(
+                                cameraState.cameraSelector,
+                                newZoom,
+                                cameraState.minZoomRatio,
+                                cameraState.maxZoomRatio
+                            )
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to set zoom", e)
                         }
@@ -692,10 +761,32 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
             onVerticalFlipChanged = { flipped ->
                 isVerticallyFlipped = flipped
                 externalPresentation?.updateFlipStates(isVerticallyFlipped, isHorizontallyFlipped)
+                // Save display settings
+                currentDisplayId?.let { displayId ->
+                    coroutineScope.launch {
+                        settingsRepository.updateDisplayFlipSettings(
+                            displayId,
+                            externalDisplay?.name ?: "External Display",
+                            isVerticallyFlipped,
+                            isHorizontallyFlipped
+                        )
+                    }
+                }
             },
             onHorizontalFlipChanged = { flipped ->
                 isHorizontallyFlipped = flipped
                 externalPresentation?.updateFlipStates(isVerticallyFlipped, isHorizontallyFlipped)
+                // Save display settings
+                currentDisplayId?.let { displayId ->
+                    coroutineScope.launch {
+                        settingsRepository.updateDisplayFlipSettings(
+                            displayId,
+                            externalDisplay?.name ?: "External Display",
+                            isVerticallyFlipped,
+                            isHorizontallyFlipped
+                        )
+                    }
+                }
             },
             onDismiss = { showFlipDialog = false }
         )
@@ -712,6 +803,10 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                 currentDeviceName = currentDeviceName,
                 onDeviceSelected = { device ->
                     coordinator.setOutputDevice(device)
+                    // Save audio output device preference
+                    coroutineScope.launch {
+                        settingsRepository.updateAudioOutputDevice(device?.id)
+                    }
                     showAudioOutputDialog = false
                 },
                 onDismiss = { showAudioOutputDialog = false },

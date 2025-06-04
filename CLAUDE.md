@@ -67,6 +67,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     - 出力デバイス情報表示
     - ミュート切り替えコントロール
     - 出力デバイス選択機能（クリックして選択可能）
+- 設定の永続化
+  - 下記の内容をローカルDBに対して設定変更時などで適切に保存して、次回起動時には同じ設定で起動できる
+    - 接続されたディスプレイを特定して、そのディスプレイが接続されている時の上下反転、左右反転の設定
+    - 最後に選択されていたカメラの種別
+    - カメラごとのズーム率
 
 ## Architecture Overview
 
@@ -82,6 +87,8 @@ This is an Android application built with Kotlin and Jetpack Compose. The projec
 - **Target SDK**: 35 (Android 15)
 - **Build System**: Gradle 8.7 with Kotlin DSL
 - **Java Compatibility**: Java 11
+- **Database**: Room 2.6.1 with KSP (Kotlin Symbol Processing)
+- **Annotation Processing**: KSP 1.9.0-1.0.13
 
 ### Project Structure
 ```
@@ -92,6 +99,7 @@ app/src/main/java/.../clearoutcamerapreview/
 │   └── CameraState.kt                # Immutable camera state management
 ├── utils/
 │   ├── CameraUtils.kt                # Camera utilities (resolution, zoom, etc.)
+│   ├── CameraRotationHelper.kt       # Camera rotation calculation logic
 │   ├── DisplayUtils.kt               # External display detection
 │   └── PresentationHelper.kt         # External display preview calculations
 ├── audio/
@@ -99,6 +107,14 @@ app/src/main/java/.../clearoutcamerapreview/
 │   ├── AudioCaptureManager.kt        # Microphone capture and playback
 │   ├── AudioCoordinator.kt           # Coordinates audio based on device state
 │   └── AudioConfigurationHelper.kt   # Optimal audio configuration detection
+├── data/
+│   ├── SettingsRepository.kt         # Settings management with Room database
+│   └── database/
+│       ├── AppDatabase.kt            # Room database instance
+│       ├── SettingsDao.kt            # Data Access Object for settings
+│       ├── DisplaySettings.kt        # Entity for display-specific settings
+│       ├── CameraSettings.kt         # Entity for camera-specific settings
+│       └── AppSettings.kt            # Entity for general app settings
 ├── model/
 │   └── Size.kt                       # Custom Size class for testing
 └── ui/theme/                         # Compose theming components
@@ -143,7 +159,23 @@ app/src/main/java/.../clearoutcamerapreview/
      - Visual indicators in UI
      - Output device selection with real-time switching
 
-5. **UI Components**:
+5. **Settings Persistence**:
+   - **SettingsRepository**: Central repository for all settings operations
+     - Initializes database on first launch
+     - Provides suspend functions for saving settings
+     - Returns Flow for reactive updates
+   - **Room Entities**:
+     - DisplaySettings: Stores flip settings per display ID
+     - CameraSettings: Stores zoom ratio per camera
+     - AppSettings: Stores last selected camera and audio device
+   - **Automatic Save/Restore**:
+     - Camera selection saved on change
+     - Zoom ratio saved per camera
+     - Display flip settings saved per display
+     - Audio output device preference saved
+     - All settings restored on app launch
+
+6. **UI Components**:
    - **SidebarSection**: Table-like section headers in sidebar
    - **StatusRow**: Read-only status display rows
    - **ClickableRow**: Interactive rows that open dialogs
@@ -155,19 +187,24 @@ app/src/main/java/.../clearoutcamerapreview/
 
 ### Testing
 - Unit tests are located in `app/src/test/`
-- 85+ unit tests covering all utility classes and helpers
+- 150+ unit tests covering all utility classes and helpers
 - Test coverage approaches 100% for non-UI components
 - Test files:
-  - `CameraUtilsTest.kt`: Camera utility functions
-  - `DisplayUtilsTest.kt`: Display detection logic
-  - `CameraStateTest.kt`: State management
-  - `PresentationHelperTest.kt`: External display calculations
-  - `AudioDeviceMonitorTest.kt`: Audio device detection
-  - `AudioCaptureManagerTest.kt`: Audio capture logic
-  - `AudioCoordinatorTest.kt`: Audio coordination
-  - `AudioConfigurationHelperTest.kt`: Audio configuration selection
-  - `AudioDeviceSelectionTest.kt`: Audio output device selection
+  - `CameraUtilsTest.kt`: Camera utility functions (23 tests)
+  - `CameraRotationHelperTest.kt`: Camera rotation logic (10 tests)
+  - `DisplayUtilsTest.kt`: Display detection logic (10 tests)
+  - `CameraStateTest.kt`: State management (7 tests)
+  - `PresentationHelperTest.kt`: External display calculations (5 tests)
+  - `AudioDeviceMonitorTest.kt`: Audio device detection (15 tests)
+  - `AudioCaptureManagerIsolatedTest.kt`: Audio capture logic (9 tests)
+  - `AudioCaptureManagerPermissionTest.kt`: Permission-specific tests (1 test)
+  - `AudioCoordinatorTest.kt`: Audio coordination (12 tests)
+  - `AudioConfigurationHelperTest.kt`: Audio configuration selection (15 tests)
+  - `AudioDeviceSelectionTest.kt`: Audio output device selection (4 tests)
+  - `SizeTest.kt`: Custom Size class tests (8 tests)
+  - Additional test files for validation and logic testing
 - Use JUnit 4, MockK, and Robolectric for testing
+- Special test setup for MockK static mocking conflicts (separated test classes)
 
 ### Development Notes
 - The project uses Gradle wrapper (`./gradlew`) for consistent builds
@@ -207,6 +244,9 @@ app/src/main/java/.../clearoutcamerapreview/
 8. **Audio Configuration**: Dynamic sample rate selection (48kHz > 44.1kHz > highest)
 9. **Audio UI Controls**: Added mute toggle and device information display
 10. **Audio Output Selection**: Added dialog for manual audio output device selection
+11. **Settings Persistence**: Implemented Room database for saving user preferences
+12. **Camera Rotation Helper**: Extracted rotation logic for better testability
+13. **Test Coverage**: Expanded to 150+ tests with 100% success rate
 
 ### Test Device
 - Device IP: 192.168.0.238:5555

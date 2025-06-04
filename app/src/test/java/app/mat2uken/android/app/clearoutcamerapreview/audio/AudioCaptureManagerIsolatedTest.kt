@@ -127,7 +127,7 @@ class AudioCaptureManagerIsolatedTest {
         assertTrue(state.hasPermission)
     }
     
-    // NOTE: "test buffer size calculation with invalid values" has been moved to AudioCaptureManagerBufferTest.kt
+    // NOTE: "test buffer size calculation with invalid values" has been commented out
     // due to persistent MockK static mocking conflicts that occur when running with other tests
     
     @Test
