@@ -9,17 +9,21 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface SettingsDao {
     // Display Settings
-    @Query("SELECT * FROM display_settings WHERE displayId = :displayId")
-    suspend fun getDisplaySettings(displayId: String): DisplaySettings?
+    @Query("SELECT * FROM display_settings WHERE displayId = :displayId AND cameraId = :cameraId")
+    suspend fun getDisplaySettings(displayId: String, cameraId: String): DisplaySettings?
     
-    @Query("SELECT * FROM display_settings WHERE displayId = :displayId")
-    fun getDisplaySettingsFlow(displayId: String): Flow<DisplaySettings?>
+    @Query("SELECT * FROM display_settings WHERE displayId = :displayId AND cameraId = :cameraId")
+    fun getDisplaySettingsFlow(displayId: String, cameraId: String): Flow<DisplaySettings?>
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateDisplaySettings(settings: DisplaySettings)
     
-    @Query("UPDATE display_settings SET isVerticallyFlipped = :isVerticallyFlipped, isHorizontallyFlipped = :isHorizontallyFlipped WHERE displayId = :displayId")
-    suspend fun updateDisplayFlipSettings(displayId: String, isVerticallyFlipped: Boolean, isHorizontallyFlipped: Boolean)
+    @Query("UPDATE display_settings SET isVerticallyFlipped = :isVerticallyFlipped, isHorizontallyFlipped = :isHorizontallyFlipped WHERE displayId = :displayId AND cameraId = :cameraId")
+    suspend fun updateDisplayFlipSettings(displayId: String, cameraId: String, isVerticallyFlipped: Boolean, isHorizontallyFlipped: Boolean)
+    
+    // Get all display settings for migration
+    @Query("SELECT * FROM display_settings")
+    suspend fun getAllDisplaySettings(): List<DisplaySettings>
     
     // Camera Settings
     @Query("SELECT * FROM camera_settings WHERE cameraId = :cameraId")

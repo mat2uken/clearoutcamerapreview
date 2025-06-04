@@ -275,11 +275,11 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
             currentDisplayId = displayId
             areSettingsLoaded = false
             coroutineScope.launch {
-                val displaySettings = settingsRepository.getDisplaySettings(displayId)
+                val displaySettings = settingsRepository.getDisplaySettings(displayId, cameraState.cameraSelector)
                 isVerticallyFlipped = displaySettings.isVerticallyFlipped
                 isHorizontallyFlipped = displaySettings.isHorizontallyFlipped
                 areSettingsLoaded = true
-                Log.d(TAG, "Display settings loaded for $displayId: V=$isVerticallyFlipped, H=$isHorizontallyFlipped")
+                Log.d(TAG, "Display settings loaded for $displayId with ${if (cameraState.cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) "front" else "back"} camera: V=$isVerticallyFlipped, H=$isHorizontallyFlipped")
             }
         } ?: run {
             // Clear current display ID when no external display is connected
@@ -339,6 +339,16 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
             } catch (e: Exception) {
                 Log.e(TAG, "Error cleaning up presentation", e)
             }
+        }
+    }
+    
+    // Reload display settings when camera changes
+    LaunchedEffect(cameraState.cameraSelector, currentDisplayId) {
+        if (currentDisplayId != null && externalDisplay != null) {
+            val displaySettings = settingsRepository.getDisplaySettings(currentDisplayId!!, cameraState.cameraSelector)
+            isVerticallyFlipped = displaySettings.isVerticallyFlipped
+            isHorizontallyFlipped = displaySettings.isHorizontallyFlipped
+            Log.d(TAG, "Reloaded display settings for camera change: V=$isVerticallyFlipped, H=$isHorizontallyFlipped")
         }
     }
     
@@ -986,12 +996,13 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
             onVerticalFlipChanged = { flipped ->
                 isVerticallyFlipped = flipped
                 externalPresentation?.updateFlipStates(isVerticallyFlipped, isHorizontallyFlipped)
-                // Save display settings
+                // Save display settings with camera info
                 currentDisplayId?.let { displayId ->
                     coroutineScope.launch {
                         settingsRepository.updateDisplayFlipSettings(
                             displayId,
                             externalDisplay?.name ?: "External Display",
+                            cameraState.cameraSelector,
                             isVerticallyFlipped,
                             isHorizontallyFlipped
                         )
@@ -1001,12 +1012,13 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
             onHorizontalFlipChanged = { flipped ->
                 isHorizontallyFlipped = flipped
                 externalPresentation?.updateFlipStates(isVerticallyFlipped, isHorizontallyFlipped)
-                // Save display settings
+                // Save display settings with camera info
                 currentDisplayId?.let { displayId ->
                     coroutineScope.launch {
                         settingsRepository.updateDisplayFlipSettings(
                             displayId,
                             externalDisplay?.name ?: "External Display",
+                            cameraState.cameraSelector,
                             isVerticallyFlipped,
                             isHorizontallyFlipped
                         )

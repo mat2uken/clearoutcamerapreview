@@ -19,26 +19,36 @@ class SettingsRepository(context: Context) {
     }
     
     // Display Settings
-    suspend fun getDisplaySettings(displayId: String): DisplaySettings {
-        return dao.getDisplaySettings(displayId) ?: DisplaySettings(displayId = displayId)
+    suspend fun getDisplaySettings(displayId: String, cameraSelector: CameraSelector): DisplaySettings {
+        val cameraId = getCameraIdNumeric(cameraSelector)
+        return dao.getDisplaySettings(displayId, cameraId) ?: DisplaySettings(
+            displayId = displayId, 
+            cameraId = cameraId
+        )
     }
     
-    fun getDisplaySettingsFlow(displayId: String): Flow<DisplaySettings> {
-        return dao.getDisplaySettingsFlow(displayId).map { 
-            it ?: DisplaySettings(displayId = displayId)
+    fun getDisplaySettingsFlow(displayId: String, cameraSelector: CameraSelector): Flow<DisplaySettings> {
+        val cameraId = getCameraIdNumeric(cameraSelector)
+        return dao.getDisplaySettingsFlow(displayId, cameraId).map { 
+            it ?: DisplaySettings(displayId = displayId, cameraId = cameraId)
         }
     }
     
     suspend fun updateDisplayFlipSettings(
         displayId: String, 
         displayName: String,
+        cameraSelector: CameraSelector,
         isVerticallyFlipped: Boolean, 
         isHorizontallyFlipped: Boolean
     ) {
+        val cameraId = getCameraIdNumeric(cameraSelector)
+        val cameraName = getCameraName(cameraSelector)
         dao.insertOrUpdateDisplaySettings(
             DisplaySettings(
                 displayId = displayId,
+                cameraId = cameraId,
                 displayName = displayName,
+                cameraName = cameraName,
                 isVerticallyFlipped = isVerticallyFlipped,
                 isHorizontallyFlipped = isHorizontallyFlipped
             )
@@ -105,5 +115,15 @@ class SettingsRepository(context: Context) {
     // Helper function to convert CameraSelector to string ID
     private fun getCameraId(cameraSelector: CameraSelector): String {
         return if (cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) "front" else "back"
+    }
+    
+    // Helper function to convert CameraSelector to numeric ID for display settings
+    private fun getCameraIdNumeric(cameraSelector: CameraSelector): String {
+        return if (cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) "1" else "0"
+    }
+    
+    // Helper function to get camera display name
+    private fun getCameraName(cameraSelector: CameraSelector): String {
+        return if (cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) "Front Camera" else "Back Camera"
     }
 }
