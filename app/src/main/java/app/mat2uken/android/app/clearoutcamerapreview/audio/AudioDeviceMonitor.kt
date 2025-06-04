@@ -17,8 +17,38 @@ private const val TAG = "AudioDeviceMonitor"
  * Monitors audio device connections and determines if external audio output is available
  */
 class AudioDeviceMonitor(private val context: Context) {
-    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private val handler = Handler(Looper.getMainLooper())
+    private val audioManager: AudioManager
+    private val handler: Handler
+    
+    init {
+        Log.d(TAG, "AudioDeviceMonitor init: Getting AudioManager")
+        try {
+            val service = context.getSystemService(Context.AUDIO_SERVICE)
+            Log.d(TAG, "AudioDeviceMonitor init: Service obtained: $service")
+            if (service == null) {
+                throw IllegalStateException("AudioManager service is null")
+            }
+            audioManager = service as AudioManager
+            Log.d(TAG, "AudioDeviceMonitor init: AudioManager obtained successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "AudioDeviceMonitor init: Failed to get AudioManager", e)
+            throw e
+        }
+        
+        Log.d(TAG, "AudioDeviceMonitor init: Creating Handler")
+        try {
+            // Use createAsync to avoid potential blocking on main thread
+            handler = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                Handler.createAsync(Looper.getMainLooper())
+            } else {
+                Handler(Looper.getMainLooper())
+            }
+            Log.d(TAG, "AudioDeviceMonitor init: Handler created successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "AudioDeviceMonitor init: Failed to create Handler", e)
+            throw e
+        }
+    }
     
     private val _hasExternalAudioOutput = MutableStateFlow(false)
     val hasExternalAudioOutput: StateFlow<Boolean> = _hasExternalAudioOutput.asStateFlow()
@@ -51,8 +81,9 @@ class AudioDeviceMonitor(private val context: Context) {
     }
     
     init {
-        // Check initial state
-        updateAudioDeviceState()
+        Log.d(TAG, "AudioDeviceMonitor init: Delaying initial state check")
+        // Delay initial state check to avoid issues during activity creation
+        // The state will be updated when startMonitoring() is called
     }
     
     /**

@@ -37,6 +37,12 @@ class AudioCaptureManager(
     private val audioDeviceMonitor: AudioDeviceMonitor? = null
 ) {
     
+    init {
+        Log.d(TAG, "AudioCaptureManager init: Starting initialization")
+        Log.d(TAG, "AudioCaptureManager init: Context class = ${context.javaClass.simpleName}")
+        Log.d(TAG, "AudioCaptureManager init: AudioDeviceMonitor provided = ${audioDeviceMonitor != null}")
+    }
+    
     // Audio configuration
     private var audioConfig: AudioConfiguration? = null
     private var recordBufferSize = 0
@@ -158,7 +164,10 @@ class AudioCaptureManager(
                     isCapturing = false,
                     isPlaying = false
                 )
-                stopAudioCapture()
+                // Don't call stopAudioCapture from within the coroutine to avoid recursion
+                withContext(Dispatchers.Main) {
+                    stopAudioCapture()
+                }
             }
         }
     }
@@ -233,7 +242,7 @@ class AudioCaptureManager(
             audioTrack = builder.build()
         } else {
             @Suppress("DEPRECATION")
-            AudioTrack(
+            audioTrack = AudioTrack(
                 AudioManager.STREAM_MUSIC,
                 config.sampleRate,
                 outputChannelConfig,
@@ -261,9 +270,38 @@ class AudioCaptureManager(
     private suspend fun startAudioLoop() = withContext(Dispatchers.IO) {
         val buffer = ByteArray(recordBufferSize)
         
+        // Verify components are initialized before starting
+        val record = audioRecord
+        val track = audioTrack
+        
         try {
-            audioRecord?.startRecording()
-            audioTrack?.play()
+            
+            if (record == null || track == null) {
+                Log.e(TAG, "Audio components not initialized: record=$record, track=$track")
+                _state.value = _state.value.copy(
+                    error = "Audio components not initialized"
+                )
+                return@withContext
+            }
+            
+            if (record.state != AudioRecord.STATE_INITIALIZED) {
+                Log.e(TAG, "AudioRecord not initialized properly: state=${record.state}")
+                _state.value = _state.value.copy(
+                    error = "AudioRecord not initialized"
+                )
+                return@withContext
+            }
+            
+            if (track.state != AudioTrack.STATE_INITIALIZED) {
+                Log.e(TAG, "AudioTrack not initialized properly: state=${track.state}")
+                _state.value = _state.value.copy(
+                    error = "AudioTrack not initialized"
+                )
+                return@withContext
+            }
+            
+            record.startRecording()
+            track.play()
             
             // Check if we should mute based on external audio availability or manual mute
             val shouldMute = audioDeviceMonitor?.hasExternalAudioOutput?.value == false || isManuallyMuted
@@ -279,7 +317,12 @@ class AudioCaptureManager(
             
             while (isActive && _state.value.isCapturing) {
                 // Read from microphone
-                val bytesRead = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                val bytesRead = try {
+                    record.read(buffer, 0, buffer.size)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error reading from AudioRecord", e)
+                    -1
+                }
                 
                 if (bytesRead > 0) {
                     // Check current mute state based on external audio and manual mute
@@ -298,7 +341,35 @@ class AudioCaptureManager(
                     
                     // Write to audio output only if not muted
                     if (!currentShouldMute) {
-                        audioTrack?.write(buffer, 0, bytesRead)
+                        try {
+                            // Re-check AudioTrack state with more thorough validation
+                            if (track.state == AudioTrack.STATE_INITIALIZED && 
+                                track.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                                
+                                // Use write method with error checking
+                                val written = track.write(buffer, 0, bytesRead)
+                                if (written < 0) {
+                                    Log.e(TAG, "AudioTrack write error: $written")
+                                    // AudioTrack might be in bad state, break the loop
+                                    break
+                                }
+                            } else {
+                                Log.w(TAG, "AudioTrack not ready: state=${track.state}, playState=${track.playState}")
+                                // If track is uninitialized, break to restart
+                                if (track.state == AudioTrack.STATE_UNINITIALIZED) {
+                                    Log.e(TAG, "AudioTrack became uninitialized, breaking loop")
+                                    break
+                                }
+                            }
+                        } catch (e: IllegalStateException) {
+                            Log.e(TAG, "AudioTrack in illegal state", e)
+                            // AudioTrack is in bad state, break the loop to restart
+                            break
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error writing to AudioTrack", e)
+                            // For severe exceptions, break the loop
+                            break
+                        }
                     }
                 } else if (bytesRead < 0) {
                     Log.e(TAG, "Error reading from AudioRecord: $bytesRead")
@@ -308,8 +379,37 @@ class AudioCaptureManager(
                 // Small yield to prevent blocking
                 yield()
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected error in audio loop", e)
+            _state.value = _state.value.copy(
+                error = "Audio loop error: ${e.message}"
+            )
         } finally {
-            Log.d(TAG, "Audio loop ended")
+            Log.d(TAG, "Audio loop ended, cleaning up")
+            // Ensure we update state to reflect that we're no longer capturing
+            _state.value = _state.value.copy(
+                isCapturing = false,
+                isPlaying = false
+            )
+            
+            // Stop recording and playback safely
+            try {
+                if (record != null && record.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    record.stop()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping AudioRecord", e)
+            }
+            
+            try {
+                if (track != null && track.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                    track.pause()
+                    track.flush()
+                    track.stop()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping AudioTrack", e)
+            }
         }
     }
     
@@ -319,34 +419,99 @@ class AudioCaptureManager(
     fun stopAudioCapture() {
         Log.d(TAG, "Stopping audio capture")
         
-        captureJob?.cancel()
-        captureJob = null
-        
-        // Stop and release AudioRecord
-        audioRecord?.apply {
-            if (recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                stop()
-            }
-            release()
-        }
-        audioRecord = null
-        
-        // Stop and release AudioTrack
-        audioTrack?.apply {
-            if (playState == AudioTrack.PLAYSTATE_PLAYING) {
-                stop()
-            }
-            release()
-        }
-        audioTrack = null
-        
+        // First update state to signal the loop to stop
         _state.value = _state.value.copy(
             isCapturing = false,
             isPlaying = false,
             isMuted = false
         )
         
+        // Cancel the coroutine job and wait for it to complete
+        captureJob?.cancel()
+        
+        // Use runBlocking to ensure cleanup happens synchronously
+        runBlocking {
+            captureJob?.join()
+        }
+        captureJob = null
+        
+        // Stop and release AudioRecord safely
+        try {
+            audioRecord?.apply {
+                if (recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    stop()
+                }
+                release()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping AudioRecord", e)
+        }
+        audioRecord = null
+        
+        // Stop and release AudioTrack safely
+        try {
+            audioTrack?.apply {
+                // Pause first to stop playback immediately
+                pause()
+                // Flush buffers to ensure no pending writes
+                flush()
+                // Then stop
+                if (playState != AudioTrack.PLAYSTATE_STOPPED) {
+                    stop()
+                }
+                // Finally release
+                release()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping AudioTrack", e)
+        }
+        audioTrack = null
+        
         Log.d(TAG, "Audio capture stopped")
+    }
+    
+    /**
+     * Restart audio capture (useful for recovering from errors or device changes)
+     */
+    fun restartAudioCapture() {
+        Log.d(TAG, "Restarting audio capture")
+        audioScope.launch {
+            // Stop current capture
+            withContext(Dispatchers.Main) {
+                stopAudioCapture()
+            }
+            
+            // Small delay to ensure cleanup
+            delay(500)
+            
+            // Start again
+            withContext(Dispatchers.Main) {
+                startAudioCapture()
+            }
+        }
+    }
+    
+    /**
+     * Update preferred output device
+     */
+    fun setPreferredOutputDevice(device: AudioDeviceInfo?) {
+        selectedOutputDevice = device
+        
+        // Update AudioTrack's preferred device if it exists and is initialized
+        audioTrack?.let { track ->
+            if (track.state == AudioTrack.STATE_INITIALIZED) {
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        track.preferredDevice = device
+                        Log.d(TAG, "Updated preferred output device: ${device?.productName}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error setting preferred device, restarting audio", e)
+                    // If setting device fails, restart audio capture
+                    restartAudioCapture()
+                }
+            }
+        }
     }
     
     /**
@@ -416,13 +581,28 @@ class AudioCaptureManager(
         if (_state.value.isCapturing && audioTrack != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 try {
-                    audioTrack?.preferredDevice = device
-                    Log.d(TAG, "Updated preferred device on active AudioTrack")
+                    // Synchronize access to audioTrack to prevent concurrent modification
+                    synchronized(this) {
+                        audioTrack?.let { track ->
+                            if (track.state == AudioTrack.STATE_INITIALIZED) {
+                                track.preferredDevice = device
+                                Log.d(TAG, "Updated preferred device on active AudioTrack")
+                            } else {
+                                Log.w(TAG, "AudioTrack not in valid state for device update: ${track.state}")
+                            }
+                        }
+                    }
+                } catch (e: IllegalStateException) {
+                    Log.e(TAG, "AudioTrack in illegal state for device update", e)
+                    // Need to restart audio capture to apply the change
+                    audioScope.launch {
+                        restartAudioCapture()
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to update preferred device", e)
-                    // Might need to restart audio capture to apply the change
                 }
             }
         }
     }
+    
 }

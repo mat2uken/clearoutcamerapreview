@@ -42,10 +42,14 @@ object FrameRateUtils {
                 
                 // For 1920x1080, prefer 60fps if available, otherwise 30fps
                 val targetFps = if (previewSize?.width == 1920 && previewSize.height == 1080) {
-                    // Try to find 60fps range first
+                    // Try to find exact 60fps range first (60-60)
                     fpsRanges.find { range ->
+                        range.upper == 60 && range.lower == 60
+                    } ?: fpsRanges.find { range ->
+                        // Then try any range that includes 60fps
                         range.upper == 60 && range.lower <= 60
                     } ?: fpsRanges.find { range ->
+                        // Finally fallback to 30fps
                         range.upper == 30 || (range.lower <= 30 && range.upper >= 30)
                     }
                 } else {

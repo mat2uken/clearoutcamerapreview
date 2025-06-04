@@ -3,6 +3,7 @@ package app.mat2uken.android.app.clearoutcamerapreview
 import android.Manifest
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -30,15 +31,23 @@ import com.google.accompanist.permissions.rememberMultiplePermissionsState
 
 @OptIn(ExperimentalPermissionsApi::class)
 class MainActivity : ComponentActivity() {
-    private lateinit var audioCoordinator: AudioCoordinator
+    private var audioCoordinator: AudioCoordinator? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Allow both landscape orientations (normal and reverse)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         
-        // Initialize audio coordinator
-        audioCoordinator = AudioCoordinator(this)
+        // Initialize audio coordinator with defensive error handling
+        try {
+            Log.d("MainActivity", "Initializing AudioCoordinator")
+            audioCoordinator = AudioCoordinator(this)
+            Log.d("MainActivity", "AudioCoordinator initialized successfully")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to initialize AudioCoordinator", e)
+            // Continue without audio functionality
+            audioCoordinator = null
+        }
         
         enableEdgeToEdge()
         setContent {
@@ -56,13 +65,13 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         // Clean up audio coordinator
-        audioCoordinator.release()
+        audioCoordinator?.release()
     }
 }
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun CameraPermissionScreen(audioCoordinator: AudioCoordinator) {
+fun CameraPermissionScreen(audioCoordinator: AudioCoordinator?) {
     val permissionsState = rememberMultiplePermissionsState(
         permissions = listOf(
             Manifest.permission.CAMERA,
@@ -73,15 +82,23 @@ fun CameraPermissionScreen(audioCoordinator: AudioCoordinator) {
     // Update audio coordinator permission state when permissions change
     LaunchedEffect(permissionsState.allPermissionsGranted) {
         if (permissionsState.allPermissionsGranted) {
-            audioCoordinator.updatePermissionState()
-            audioCoordinator.start()
+            // Add a longer delay to ensure the activity is fully created and stable
+            kotlinx.coroutines.delay(1000)
+            try {
+                Log.d("CameraPermissionScreen", "Starting AudioCoordinator after delay")
+                audioCoordinator?.updatePermissionState()
+                audioCoordinator?.start()
+                Log.d("CameraPermissionScreen", "AudioCoordinator started successfully")
+            } catch (e: Exception) {
+                Log.e("CameraPermissionScreen", "Failed to start AudioCoordinator", e)
+            }
         }
     }
     
     // Clean up audio coordinator when composable is disposed
     DisposableEffect(Unit) {
         onDispose {
-            audioCoordinator.stop()
+            audioCoordinator?.stop()
         }
     }
     

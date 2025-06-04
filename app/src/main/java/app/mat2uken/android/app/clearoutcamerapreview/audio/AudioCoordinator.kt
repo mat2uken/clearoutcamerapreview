@@ -13,11 +13,32 @@ private const val TAG = "AudioCoordinator"
  */
 class AudioCoordinator(private val context: Context) {
     
-    private val audioDeviceMonitor = AudioDeviceMonitor(context)
-    private val audioCaptureManager = AudioCaptureManager(context, audioDeviceMonitor)
-    
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val audioDeviceMonitor: AudioDeviceMonitor
+    private val audioCaptureManager: AudioCaptureManager
+    private val scope: CoroutineScope
     private var monitoringJob: Job? = null
+    
+    init {
+        Log.d(TAG, "AudioCoordinator init: Starting initialization")
+        try {
+            Log.d(TAG, "AudioCoordinator init: Creating AudioDeviceMonitor")
+            audioDeviceMonitor = AudioDeviceMonitor(context)
+            Log.d(TAG, "AudioCoordinator init: AudioDeviceMonitor created successfully")
+            
+            Log.d(TAG, "AudioCoordinator init: Creating AudioCaptureManager")
+            audioCaptureManager = AudioCaptureManager(context, audioDeviceMonitor)
+            Log.d(TAG, "AudioCoordinator init: AudioCaptureManager created successfully")
+            
+            Log.d(TAG, "AudioCoordinator init: Creating CoroutineScope")
+            scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+            Log.d(TAG, "AudioCoordinator init: CoroutineScope created successfully")
+            
+            Log.d(TAG, "AudioCoordinator init: Initialization complete")
+        } catch (e: Exception) {
+            Log.e(TAG, "AudioCoordinator init: Failed during initialization", e)
+            throw e
+        }
+    }
     
     // Combined state
     data class AudioState(
@@ -43,40 +64,62 @@ class AudioCoordinator(private val context: Context) {
     fun start() {
         Log.d(TAG, "Starting audio coordinator")
         
-        // Start device monitoring
-        audioDeviceMonitor.startMonitoring()
-        
-        // Monitor device changes and capture state
-        monitoringJob = scope.launch {
-            combine(
-                audioDeviceMonitor.hasExternalAudioOutput,
-                audioCaptureManager.state
-            ) { hasExternal, captureState ->
-                AudioState(
-                    hasExternalOutput = hasExternal,
-                    isCapturing = captureState.isCapturing,
-                    isPlaying = captureState.isPlaying,
-                    hasPermission = captureState.hasPermission,
-                    error = captureState.error,
-                    sampleRate = captureState.sampleRate,
-                    channelCount = captureState.channelCount,
-                    isMuted = captureState.isMuted,
-                    isManuallyMuted = captureState.isManuallyMuted,
-                    microphoneName = captureState.microphoneName,
-                    outputDeviceName = captureState.outputDeviceName
-                )
-            }.collect { newState ->
-                _audioState.value = newState
-                
-                // Start or stop audio capture based on external output availability
-                if (newState.hasExternalOutput && newState.hasPermission && !newState.isCapturing) {
-                    Log.d(TAG, "External audio output detected, starting capture")
-                    audioCaptureManager.startAudioCapture()
-                } else if (!newState.hasExternalOutput && newState.isCapturing) {
-                    Log.d(TAG, "No external audio output, stopping capture")
-                    audioCaptureManager.stopAudioCapture()
+        try {
+            // Start device monitoring
+            audioDeviceMonitor.startMonitoring()
+            
+            // Monitor device changes and capture state
+            monitoringJob = scope.launch {
+                try {
+                    combine(
+                        audioDeviceMonitor.hasExternalAudioOutput,
+                        audioCaptureManager.state
+                    ) { hasExternal, captureState ->
+                        AudioState(
+                            hasExternalOutput = hasExternal,
+                            isCapturing = captureState.isCapturing,
+                            isPlaying = captureState.isPlaying,
+                            hasPermission = captureState.hasPermission,
+                            error = captureState.error,
+                            sampleRate = captureState.sampleRate,
+                            channelCount = captureState.channelCount,
+                            isMuted = captureState.isMuted,
+                            isManuallyMuted = captureState.isManuallyMuted,
+                            microphoneName = captureState.microphoneName,
+                            outputDeviceName = captureState.outputDeviceName
+                        )
+                    }.collect { newState ->
+                        _audioState.value = newState
+                        
+                        // Start or stop audio capture based on external output availability
+                        if (newState.hasExternalOutput && newState.hasPermission && !newState.isCapturing) {
+                            Log.d(TAG, "External audio output detected, starting capture")
+                            try {
+                                audioCaptureManager.startAudioCapture()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to start audio capture", e)
+                            }
+                        } else if (!newState.hasExternalOutput && newState.isCapturing) {
+                            Log.d(TAG, "No external audio output, stopping capture")
+                            try {
+                                audioCaptureManager.stopAudioCapture()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to stop audio capture", e)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in audio monitoring loop", e)
+                    _audioState.value = _audioState.value.copy(
+                        error = "Audio monitoring error: ${e.message}"
+                    )
                 }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start audio coordinator", e)
+            _audioState.value = _audioState.value.copy(
+                error = "Failed to start audio: ${e.message}"
+            )
         }
     }
     

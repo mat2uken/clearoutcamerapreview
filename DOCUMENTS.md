@@ -140,14 +140,43 @@ data class AppSettings(
 ## 外部ディスプレイサポート
 
 ### DisplayUtils
-外部ディスプレイの検出ロジック。
+外部ディスプレイの検出と情報取得ロジック。
 
 ```kotlin
+data class DisplayInfo(
+    val displayId: Int,
+    val name: String,
+    val width: Int,
+    val height: Int,
+    val rotation: Int,
+    val densityDpi: Int,
+    val isDefaultDisplay: Boolean
+)
+
 object DisplayUtils {
     fun findExternalDisplay(displays: Array<Display>): Display?
+    fun findAllExternalDisplays(displays: Array<Display>): List<Display>
+    fun getDisplayInfo(display: Display, context: Context?): DisplayInfo
+    fun getAllDisplayInfo(displayManager: DisplayManager, context: Context?): List<DisplayInfo>
     fun isExternalDisplay(display: Display): Boolean
 }
 ```
+
+### マルチディスプレイ管理
+- 複数の外部ディスプレイの検出
+- ディスプレイ情報の詳細取得（名前、ID、解像度）
+- リアルタイムディスプレイ切り替え
+- ディスプレイ固有設定の保存
+
+### ディスプレイ選択UI
+**サイドバー → Display Status セクション**
+
+表示される情報：
+1. **External Display**: 接続状態
+2. **Display Name**: ディスプレイ名
+3. **Display ID**: ディスプレイID番号
+4. **Resolution**: ディスプレイ解像度
+5. **Select Display**: ディスプレイ切り替えUI（複数ディスプレイ時のみ表示）
 
 ### SimpleCameraPresentation
 外部ディスプレイ用のPresentation実装。
@@ -157,6 +186,7 @@ object DisplayUtils {
 - 回転補正
 - 反転変換サポート
 - 16:9アスペクト比の維持
+- 動的ディスプレイ切り替え対応
 
 ### 解像度選択ロジック
 1. 1920x1080を優先

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import app.mat2uken.android.app.clearoutcamerapreview.utils.CameraUtils
 import app.mat2uken.android.app.clearoutcamerapreview.utils.DisplayUtils
+import app.mat2uken.android.app.clearoutcamerapreview.utils.DisplayInfo
 import app.mat2uken.android.app.clearoutcamerapreview.model.Size as CustomSize
 import app.mat2uken.android.app.clearoutcamerapreview.camera.CameraState
 import androidx.compose.material.icons.Icons
@@ -273,12 +274,15 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
     val displayManager = remember { context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager }
     var externalDisplay by remember { mutableStateOf<Display?>(null) }
     var externalPresentation by remember { mutableStateOf<SimpleCameraPresentation?>(null) }
+    var availableDisplays by remember { mutableStateOf<List<DisplayInfo>>(emptyList()) }
+    var selectedDisplayId by remember { mutableStateOf<Int?>(null) }
     
     // Dialog states
     var showCameraDialog by remember { mutableStateOf(false) }
     var showZoomDialog by remember { mutableStateOf(false) }
     var showFlipDialog by remember { mutableStateOf(false) }
     var showAudioOutputDialog by remember { mutableStateOf(false) }
+    var showDisplaySelectionDialog by remember { mutableStateOf(false) }
     
     // Sidebar visibility state
     var showSidebar by remember { mutableStateOf(true) }
@@ -312,15 +316,33 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
     // Function to check for external displays
     fun checkExternalDisplays() {
         val displays = displayManager.displays
-        val external = DisplayUtils.findExternalDisplay(displays)
-        externalDisplay = external
+        
+        // Get information about all displays
+        availableDisplays = DisplayUtils.getAllDisplayInfo(displayManager, context)
+        
+        // Find external displays
+        val externalDisplays = DisplayUtils.findAllExternalDisplays(displays)
+        
+        // If we have a selected display ID, try to find it; otherwise use the first external display
+        val targetDisplay = if (selectedDisplayId != null) {
+            displays.find { it.displayId == selectedDisplayId }
+        } else {
+            externalDisplays.firstOrNull()
+        }
+        
+        // Update selected display ID if we found a target display
+        if (targetDisplay != null && selectedDisplayId == null) {
+            selectedDisplayId = targetDisplay.displayId
+        }
+        
+        externalDisplay = targetDisplay
         cameraState = cameraState.updateExternalDisplay(
-            connected = external != null,
-            displayId = external?.displayId
+            connected = targetDisplay != null,
+            displayId = targetDisplay?.displayId
         )
         
         // Load display settings if external display is found
-        external?.let { display ->
+        targetDisplay?.let { display ->
             val displayId = display.displayId.toString()
             currentDisplayId = displayId
             areSettingsLoaded = false
@@ -335,9 +357,10 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
             // Clear current display ID when no external display is connected
             currentDisplayId = null
             areSettingsLoaded = false
+            selectedDisplayId = null
         }
         
-        Log.d(TAG, "Checked displays. External display ${if (external != null) "found" else "not found"}")
+        Log.d(TAG, "Checked displays. Available displays: ${availableDisplays.size}, External displays: ${externalDisplays.size}, Selected: ${targetDisplay?.displayId}")
     }
     
     // Initialize display state
@@ -629,6 +652,8 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
         val cam = camera
         
         if (display != null && cam != null && currentDisplayId != null && areSettingsLoaded) {
+            // Add a small delay to ensure main preview is stable
+            kotlinx.coroutines.delay(500)
             try {
                 // Dismiss existing presentation
                 externalPresentation?.dismiss()
@@ -648,7 +673,25 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                     presentation.setCameraPreviewSize(size)
                     Log.d(TAG, "Setting external display camera size: ${size.width}x${size.height}")
                 }
-                presentation.show()
+                
+                try {
+                    presentation.show()
+                    
+                    // Check if the presentation is showing properly
+                    if (!presentation.isShowing) {
+                        Log.e(TAG, "Presentation failed to show")
+                        presentation.dismiss()
+                        return@LaunchedEffect
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Exception showing presentation", e)
+                    try {
+                        presentation.dismiss()
+                    } catch (dismissError: Exception) {
+                        Log.e(TAG, "Error dismissing presentation after show failure", dismissError)
+                    }
+                    return@LaunchedEffect
+                }
                 
                 // Setup camera for external display
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
@@ -905,6 +948,37 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                         showBadge = cameraState.isExternalDisplayConnected,
                         badgeText = "LIVE"
                     )
+                    
+                    // Show current display information if connected
+                    if (cameraState.isExternalDisplayConnected) {
+                        externalDisplay?.let { display ->
+                            val displayInfo = availableDisplays.find { it.displayId == display.displayId }
+                            displayInfo?.let { info ->
+                                StatusRow(
+                                    label = "Display Name",
+                                    value = info.name
+                                )
+                                StatusRow(
+                                    label = "Display ID",
+                                    value = info.displayId.toString()
+                                )
+                                StatusRow(
+                                    label = "Resolution",
+                                    value = info.getDisplaySizeString()
+                                )
+                            }
+                        }
+                        
+                        // Display selection dropdown if multiple external displays are available
+                        val externalDisplays = availableDisplays.filter { !it.isDefaultDisplay }
+                        if (externalDisplays.size > 1) {
+                            ClickableRow(
+                                label = "Select Display",
+                                value = externalDisplays.find { it.displayId == selectedDisplayId }?.name ?: "Select...",
+                                onClick = { showDisplaySelectionDialog = true }
+                            )
+                        }
+                    }
                 }
                 
                 // Audio Status Section
@@ -1156,6 +1230,23 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
             )
         }
     }
+    
+    // Display Selection Dialog
+    if (showDisplaySelectionDialog) {
+        val externalDisplays = availableDisplays.filter { !it.isDefaultDisplay }
+        val currentDisplayName = externalDisplays.find { it.displayId == selectedDisplayId }?.name ?: "Unknown"
+        
+        DisplaySelectionDialog(
+            availableDisplays = externalDisplays,
+            currentDisplayName = currentDisplayName,
+            onDisplaySelected = { displayInfo ->
+                selectedDisplayId = displayInfo.displayId
+                checkExternalDisplays() // Refresh display state with new selection
+                showDisplaySelectionDialog = false
+            },
+            onDismiss = { showDisplaySelectionDialog = false }
+        )
+    }
 }
 
 /**
@@ -1177,9 +1268,8 @@ class SimpleCameraPresentation(
     private var cameraPreviewSize: Size? = null
     
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
-        super.onCreate(savedInstanceState)
-        
         try {
+            super.onCreate(savedInstanceState)
             // Make fullscreen
             try {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
@@ -1202,9 +1292,23 @@ class SimpleCameraPresentation(
             // Get display metrics and info
             val displayMetrics = android.util.DisplayMetrics()
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                val bounds = context.getSystemService(WindowManager::class.java).currentWindowMetrics.bounds
-                displayMetrics.widthPixels = bounds.width()
-                displayMetrics.heightPixels = bounds.height()
+                try {
+                    val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                    val bounds = windowManager?.currentWindowMetrics?.bounds
+                    if (bounds != null) {
+                        displayMetrics.widthPixels = bounds.width()
+                        displayMetrics.heightPixels = bounds.height()
+                    } else {
+                        // Fallback to deprecated method
+                        @Suppress("DEPRECATION")
+                        display.getRealMetrics(displayMetrics)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error getting display metrics on API 30+", e)
+                    // Fallback to deprecated method
+                    @Suppress("DEPRECATION")
+                    display.getRealMetrics(displayMetrics)
+                }
             } else {
                 @Suppress("DEPRECATION")
                 display.getRealMetrics(displayMetrics)
@@ -1316,6 +1420,12 @@ class SimpleCameraPresentation(
             Log.d(TAG, "Presentation created for display ${display.displayId}")
         } catch (e: Exception) {
             Log.e(TAG, "Error creating presentation", e)
+            // Try to dismiss if we encounter an error
+            try {
+                dismiss()
+            } catch (dismissError: Exception) {
+                Log.e(TAG, "Error dismissing presentation after creation failure", dismissError)
+            }
         }
     }
     
@@ -1825,6 +1935,87 @@ private fun AudioOutputSelectionDialog(
                                     text = deviceName,
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DisplaySelectionDialog(
+    availableDisplays: List<DisplayInfo>,
+    currentDisplayName: String,
+    onDisplaySelected: (DisplayInfo) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Select Output Display",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                if (availableDisplays.isEmpty()) {
+                    Text(
+                        text = "No external displays available",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
+                } else {
+                    availableDisplays.forEach { displayInfo ->
+                        val isSelected = displayInfo.name == currentDisplayName
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onDisplaySelected(displayInfo) }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = { onDisplaySelected(displayInfo) }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = displayInfo.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
+                                )
+                                Text(
+                                    text = "ID: ${displayInfo.displayId} • ${displayInfo.getDisplaySizeString()}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }

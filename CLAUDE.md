@@ -273,6 +273,16 @@ app/src/main/java/.../clearoutcamerapreview/
 17. **Sidebar Toggle UI**: Replaced tap-to-toggle with dedicated buttons and status bar aware positioning
 18. **Code Cleanup**: Removed 8 unused files, fixed deprecated API warnings, improved testability with FrameRateUtils extraction
 
+### Known Issues
+1. **AudioCoordinator crashes with external display** (December 2024) - **FIXED**:
+   - **Issue**: When an external display is connected, AudioCoordinator initialization could cause the app to crash on startup
+   - **Root Cause**: AudioDeviceMonitor was calling updateAudioDeviceState() in its init block, which could conflict with activity creation timing
+   - **Fix Applied**: 
+     - Delayed initial audio device state check to startMonitoring() call
+     - Added defensive error handling in MainActivity and AudioCoordinator
+     - Added try-catch blocks around audio operations
+   - **Result**: AudioCoordinator now works properly with external displays connected
+
 ### Recent Code Cleanup (December 2024)
 - **Files Removed**: 8 unused implementation files and test files
   - Old camera screen implementations (CameraScreen, MultiDisplayCameraScreen, etc.)
@@ -292,9 +302,9 @@ app/src/main/java/.../clearoutcamerapreview/
   - Maintained 100% test coverage for utility classes
 
 ### Test Device
-- Device IP: 192.168.0.137:5555
+- Device IP: 192.168.0.238:5555
 - ADB commands:
   ```bash
-  ~/Library/Android/sdk/platform-tools/adb -s 192.168.0.137:5555 install -r app/build/outputs/apk/debug/app-debug.apk
-  ~/Library/Android/sdk/platform-tools/adb -s 192.168.0.137:5555 shell am start -n app.mat2uken.android.app.clearoutcamerapreview/.MainActivity
+  ~/Library/Android/sdk/platform-tools/adb -s 192.168.0.238:5555 install -r app/build/outputs/apk/debug/app-debug.apk
+  ~/Library/Android/sdk/platform-tools/adb -s 192.168.0.238:5555 shell am start -n app.mat2uken.android.app.clearoutcamerapreview/.MainActivity
   ```
