@@ -70,6 +70,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.delay
+import android.os.PowerManager
 
 private const val TAG = "SimplifiedMultiDisplay"
 
@@ -278,6 +279,15 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
     var availableDisplays by remember { mutableStateOf<List<DisplayInfo>>(emptyList()) }
     var selectedDisplayId by remember { mutableStateOf<Int?>(null) }
     
+    // Wake lock management
+    val powerManager = remember { context.getSystemService(Context.POWER_SERVICE) as PowerManager }
+    val wakeLock = remember { 
+        powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "ClearOutCameraPreview:ExternalDisplayWakeLock"
+        )
+    }
+    
     // Dialog states
     var showCameraDialog by remember { mutableStateOf(false) }
     var showZoomDialog by remember { mutableStateOf(false) }
@@ -345,6 +355,29 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
             displayId = targetDisplay?.displayId
         )
         
+        // Manage wake lock based on external display connection
+        if (targetDisplay != null) {
+            // Acquire wake lock when external display is connected
+            if (!wakeLock.isHeld) {
+                try {
+                    wakeLock.acquire()
+                    Log.d(TAG, "Wake lock acquired for external display")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to acquire wake lock", e)
+                }
+            }
+        } else {
+            // Release wake lock when no external display is connected
+            if (wakeLock.isHeld) {
+                try {
+                    wakeLock.release()
+                    Log.d(TAG, "Wake lock released - no external display")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to release wake lock", e)
+                }
+            }
+        }
+        
         // Load display settings if external display is found
         targetDisplay?.let { display ->
             val displayId = display.displayId.toString()
@@ -408,6 +441,15 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                 externalPresentation?.dismiss()
             } catch (e: Exception) {
                 Log.e(TAG, "Error cleaning up presentation", e)
+            }
+            // Release wake lock when composable is disposed
+            if (wakeLock.isHeld) {
+                try {
+                    wakeLock.release()
+                    Log.d(TAG, "Wake lock released on dispose")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to release wake lock on dispose", e)
+                }
             }
         }
     }
