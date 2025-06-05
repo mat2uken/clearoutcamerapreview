@@ -238,8 +238,7 @@ class SimpleCameraPresentation(
         // Use CameraRotationHelper for rotation compensation calculation
         return CameraRotationHelper.getRotationCompensation(
             deviceRotation,
-            displayRotation,
-            isFrontCamera
+            displayRotation
         )
     }
 }

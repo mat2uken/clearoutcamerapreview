@@ -472,9 +472,7 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                 }
                 
                 // Create preview with selected resolution
-                // Use getTargetRotation only for front camera
-                val isFront = CameraRotationHelper.isFrontCamera(cameraState.cameraSelector)
-                val targetRotation = CameraRotationHelper.getTargetRotation(rotation, isFront)
+                val targetRotation = CameraRotationHelper.getTargetRotation(rotation)
                 val targetResolution = selectedResolution
                 
                 val preview = if (targetResolution != null) {
@@ -556,7 +554,7 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                     
                     previewBuilder.build()
                         .also {
-                            Log.d(TAG, "Preview created with target resolution: ${targetResolution.width}x${targetResolution.height}, rotation: $targetRotation, isFront: $isFront")
+                            Log.d(TAG, "Preview created with target resolution: ${targetResolution.width}x${targetResolution.height}, rotation: $targetRotation, isFront: ${CameraRotationHelper.isFrontCamera(cameraState.cameraSelector)}")
                         }
                 } else {
                     // Fallback to default 16:9 resolution if no specific resolution is selected
@@ -585,7 +583,7 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                         .setTargetRotation(targetRotation)
                         .build()
                         .also {
-                            Log.d(TAG, "Preview created with default 1920x1080 resolution, rotation: $targetRotation, isFront: $isFront")
+                            Log.d(TAG, "Preview created with default 1920x1080 resolution, rotation: $targetRotation, isFront: ${CameraRotationHelper.isFrontCamera(cameraState.cameraSelector)}")
                         }
                 }
                 
@@ -735,9 +733,7 @@ fun SimplifiedMultiDisplayCameraScreen(audioCoordinator: AudioCoordinator? = nul
                         }
                         
                         // Create previews with selected resolution
-                        // Use getTargetRotation only for front camera
-                        val isFrontCam = CameraRotationHelper.isFrontCamera(cameraState.cameraSelector)
-                        val externalTargetRotation = CameraRotationHelper.getTargetRotation(rotation, isFrontCam)
+                        val externalTargetRotation = CameraRotationHelper.getTargetRotation(rotation)
                         
                         val previewBuilder = if (selectedResolution != null) {
                             // Create resolution selector with custom resolution filter

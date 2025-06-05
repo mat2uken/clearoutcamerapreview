@@ -32,6 +32,26 @@ class DisplayUtilsTest {
         unmockkStatic(android.os.Build.VERSION::class)
     }
     
+    /**
+     * Helper method to mock display metrics for testing
+     * This abstracts the deprecated getRealMetrics API usage
+     */
+    private fun mockDisplayMetrics(
+        display: Display,
+        width: Int,
+        height: Int,
+        dpi: Int
+    ) {
+        // For testing purposes, we still need to mock getRealMetrics
+        // as that's what DisplayUtils uses internally
+        every { display.getRealMetrics(any()) } answers {
+            val metrics = firstArg<DisplayMetrics>()
+            metrics.widthPixels = width
+            metrics.heightPixels = height
+            metrics.densityDpi = dpi
+        }
+    }
+    
     @Test
     fun `findExternalDisplay returns null for empty array`() {
         val result = DisplayUtils.findExternalDisplay(emptyArray())
@@ -221,12 +241,7 @@ class DisplayUtilsTest {
         every { display.displayId } returns 1
         every { display.name } returns "Test Monitor"
         every { display.rotation } returns Surface.ROTATION_0
-        every { display.getRealMetrics(any()) } answers {
-            val metrics = firstArg<DisplayMetrics>()
-            metrics.widthPixels = 1920
-            metrics.heightPixels = 1080
-            metrics.densityDpi = 160
-        }
+        mockDisplayMetrics(display, 1920, 1080, 160)
         
         val result = DisplayUtils.getDisplayInfo(display)
         
@@ -245,12 +260,7 @@ class DisplayUtilsTest {
         every { display.displayId } returns Display.DEFAULT_DISPLAY
         every { display.name } returns "Built-in Screen"
         every { display.rotation } returns Surface.ROTATION_0
-        every { display.getRealMetrics(any()) } answers {
-            val metrics = firstArg<DisplayMetrics>()
-            metrics.widthPixels = 1080
-            metrics.heightPixels = 1920
-            metrics.densityDpi = 320
-        }
+        mockDisplayMetrics(display, 1080, 1920, 320)
         
         val result = DisplayUtils.getDisplayInfo(display)
         
@@ -267,6 +277,7 @@ class DisplayUtilsTest {
         every { display.displayId } returns 1
         every { display.name } returns null
         every { display.rotation } returns Surface.ROTATION_0
+        @Suppress("DEPRECATION")
         every { display.getRealMetrics(any()) } answers {
             val metrics = firstArg<DisplayMetrics>()
             metrics.widthPixels = 1920
@@ -286,23 +297,13 @@ class DisplayUtilsTest {
         every { display1.displayId } returns Display.DEFAULT_DISPLAY
         every { display1.name } returns "Default"
         every { display1.rotation } returns Surface.ROTATION_0
-        every { display1.getRealMetrics(any()) } answers {
-            val metrics = firstArg<DisplayMetrics>()
-            metrics.widthPixels = 1080
-            metrics.heightPixels = 1920
-            metrics.densityDpi = 320
-        }
+        mockDisplayMetrics(display1, 1080, 1920, 320)
         
         val display2 = mockk<Display>()
         every { display2.displayId } returns 1
         every { display2.name } returns "External"
         every { display2.rotation } returns Surface.ROTATION_0
-        every { display2.getRealMetrics(any()) } answers {
-            val metrics = firstArg<DisplayMetrics>()
-            metrics.widthPixels = 1920
-            metrics.heightPixels = 1080
-            metrics.densityDpi = 160
-        }
+        mockDisplayMetrics(display2, 1920, 1080, 160)
         
         val displayManager = mockk<DisplayManager>()
         every { displayManager.displays } returns arrayOf(display1, display2)

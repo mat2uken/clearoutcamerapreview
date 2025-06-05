@@ -27,88 +27,78 @@ class CameraRotationHelperTest {
     }
     
     @Test
-    fun `test getTargetRotation for back camera returns device rotation unchanged`() {
-        // Back camera should use device rotation directly
-        assertEquals(Surface.ROTATION_0, CameraRotationHelper.getTargetRotation(Surface.ROTATION_0, false))
-        assertEquals(Surface.ROTATION_90, CameraRotationHelper.getTargetRotation(Surface.ROTATION_90, false))
-        assertEquals(Surface.ROTATION_180, CameraRotationHelper.getTargetRotation(Surface.ROTATION_180, false))
-        assertEquals(Surface.ROTATION_270, CameraRotationHelper.getTargetRotation(Surface.ROTATION_270, false))
-    }
-    
-    @Test
-    fun `test getTargetRotation for front camera returns device rotation unchanged`() {
-        // Front camera now uses device rotation directly like back camera
-        assertEquals(Surface.ROTATION_0, CameraRotationHelper.getTargetRotation(Surface.ROTATION_0, true))
-        assertEquals(Surface.ROTATION_90, CameraRotationHelper.getTargetRotation(Surface.ROTATION_90, true))
-        assertEquals(Surface.ROTATION_180, CameraRotationHelper.getTargetRotation(Surface.ROTATION_180, true))
-        assertEquals(Surface.ROTATION_270, CameraRotationHelper.getTargetRotation(Surface.ROTATION_270, true))
+    fun `test getTargetRotation returns device rotation unchanged`() {
+        // Should use device rotation directly
+        assertEquals(Surface.ROTATION_0, CameraRotationHelper.getTargetRotation(Surface.ROTATION_0))
+        assertEquals(Surface.ROTATION_90, CameraRotationHelper.getTargetRotation(Surface.ROTATION_90))
+        assertEquals(Surface.ROTATION_180, CameraRotationHelper.getTargetRotation(Surface.ROTATION_180))
+        assertEquals(Surface.ROTATION_270, CameraRotationHelper.getTargetRotation(Surface.ROTATION_270))
     }
     
     @Test
     fun `test getTargetRotation handles invalid rotation values`() {
-        // Both cameras now return invalid values unchanged
-        assertEquals(-1, CameraRotationHelper.getTargetRotation(-1, true))
-        assertEquals(999, CameraRotationHelper.getTargetRotation(999, true))
-        assertEquals(-1, CameraRotationHelper.getTargetRotation(-1, false))
-        assertEquals(999, CameraRotationHelper.getTargetRotation(999, false))
+        // Should return invalid values unchanged
+        assertEquals(-1, CameraRotationHelper.getTargetRotation(-1))
+        assertEquals(999, CameraRotationHelper.getTargetRotation(999))
     }
     
     @Test
-    fun `test getRotationCompensation for back camera always returns 180 degrees`() {
-        // Back camera uses fixed 180 degree rotation for external display
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_0, false))
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_90, false))
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_180, Surface.ROTATION_180, false))
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_270, Surface.ROTATION_270, false))
+    fun `test deprecated getTargetRotation with boolean parameter`() {
+        // Test that deprecated method still works
+        assertEquals(Surface.ROTATION_0, CameraRotationHelper.getTargetRotation(Surface.ROTATION_0, false))
+        assertEquals(Surface.ROTATION_0, CameraRotationHelper.getTargetRotation(Surface.ROTATION_0, true))
+        assertEquals(Surface.ROTATION_90, CameraRotationHelper.getTargetRotation(Surface.ROTATION_90, false))
+        assertEquals(Surface.ROTATION_90, CameraRotationHelper.getTargetRotation(Surface.ROTATION_90, true))
+    }
+    
+    @Test
+    fun `test getRotationCompensation always returns 180 degrees`() {
+        // Fixed 180 degree rotation for external display
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_0))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_90))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_180, Surface.ROTATION_180))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_270, Surface.ROTATION_270))
         
         // Should be 180 regardless of rotation combination
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_90, false))
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_270, false))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_90))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_270))
     }
     
     @Test
-    fun `test getRotationCompensation for front camera always returns 180 degrees`() {
-        // Front camera now uses fixed 180 degree rotation like back camera
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_0, true))
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_90, true))
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_180, Surface.ROTATION_180, true))
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_270, Surface.ROTATION_270, true))
-    }
-    
-    @Test
-    fun `test getRotationCompensation for front camera with different rotations`() {
-        // Front camera always returns 180 degrees regardless of rotation combination
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_90, true))
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_180, true))
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_270, true))
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_0, true))
+    fun `test getRotationCompensation with different rotations`() {
+        // Always returns 180 degrees regardless of rotation combination
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_90))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_180))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_270))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_0))
     }
     
     @Test
     fun `test getRotationCompensation handles invalid rotation values`() {
-        // Should always return 180f for both cameras
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(-1, Surface.ROTATION_0, true))
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, -1, true))
-        assertEquals(180f, CameraRotationHelper.getRotationCompensation(-1, -1, false))
+        // Should always return 180f
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(-1, Surface.ROTATION_0))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, -1))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(-1, -1))
+    }
+    
+    @Test
+    fun `test deprecated getRotationCompensation with boolean parameter`() {
+        // Test that deprecated method still works
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_0, false))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_0, Surface.ROTATION_0, true))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_90, false))
+        assertEquals(180f, CameraRotationHelper.getRotationCompensation(Surface.ROTATION_90, Surface.ROTATION_90, true))
     }
     
     @Test
     fun `test all rotation combinations for device and display`() {
         val rotations = listOf(Surface.ROTATION_0, Surface.ROTATION_90, Surface.ROTATION_180, Surface.ROTATION_270)
         
-        // Test all combinations for back camera (should always be 180)
+        // Test all combinations (should always be 180)
         for (deviceRotation in rotations) {
             for (displayRotation in rotations) {
-                val result = CameraRotationHelper.getRotationCompensation(deviceRotation, displayRotation, false)
-                assertEquals("Back camera should always return 180 degrees", 180f, result)
-            }
-        }
-        
-        // Test all combinations for front camera (should always be 180)
-        for (deviceRotation in rotations) {
-            for (displayRotation in rotations) {
-                val result = CameraRotationHelper.getRotationCompensation(deviceRotation, displayRotation, true)
-                assertEquals("Front camera should always return 180 degrees", 180f, result)
+                val result = CameraRotationHelper.getRotationCompensation(deviceRotation, displayRotation)
+                assertEquals("Should always return 180 degrees", 180f, result)
             }
         }
     }

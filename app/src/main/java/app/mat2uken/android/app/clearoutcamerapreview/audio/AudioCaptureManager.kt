@@ -218,17 +218,23 @@ class AudioCaptureManager(
         // Initialize AudioTrack
         val outputChannelConfig = AudioConfigurationHelper.getOutputChannelConfig(config.channelCount)
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val audioAttributesBuilder = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-            
-            // Add low latency flag for API 24+
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                audioAttributesBuilder.setFlags(AudioAttributes.FLAG_LOW_LATENCY)
+            // Configure audio attributes for low latency
+            // For API 26+, we use setPerformanceMode
+            // For API 24-25, we optimize buffer size and use appropriate usage type
+            val usage = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                AudioAttributes.USAGE_MEDIA
+            } else {
+                // Use GAME usage for better latency on older APIs
+                AudioAttributes.USAGE_GAME
             }
             
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(usage)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+            
             val trackBuilder = AudioTrack.Builder()
-                .setAudioAttributes(audioAttributesBuilder.build())
+                .setAudioAttributes(audioAttributes)
                 .setAudioFormat(
                     AudioFormat.Builder()
                         .setSampleRate(config.sampleRate)

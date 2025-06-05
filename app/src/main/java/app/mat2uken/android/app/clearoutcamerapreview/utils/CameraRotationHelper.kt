@@ -18,11 +18,47 @@ object CameraRotationHelper {
     /**
      * Calculate the target rotation for the preview
      * Both front and back cameras should use the same rotation
+     * 
+     * @param deviceRotation The device's current rotation
+     * @return The target rotation value
      */
-    fun getTargetRotation(deviceRotation: Int, isFrontCamera: Boolean): Int {
+    fun getTargetRotation(deviceRotation: Int): Int {
         // Use the device rotation directly for both cameras
         // CameraX handles the sensor orientation differences internally
         return deviceRotation
+    }
+    
+    /**
+     * Calculate the target rotation for the preview
+     * @param deviceRotation The device's current rotation
+     * @param isFrontCamera Whether the front camera is being used
+     * @return The target rotation value
+     * @deprecated Use getTargetRotation(deviceRotation) instead. Camera type no longer affects rotation.
+     */
+    @Deprecated("Camera type no longer affects rotation", ReplaceWith("getTargetRotation(deviceRotation)"))
+    fun getTargetRotation(deviceRotation: Int, isFrontCamera: Boolean): Int {
+        return getTargetRotation(deviceRotation)
+    }
+    
+    /**
+     * Calculate rotation compensation for external display
+     * 
+     * Current implementation returns a fixed 180 degree rotation for all cases
+     * to ensure proper display on external monitors.
+     * 
+     * @param deviceRotation The device's current rotation
+     * @param displayRotation The external display's rotation
+     * @return The rotation compensation in degrees (always 180f)
+     */
+    fun getRotationCompensation(
+        deviceRotation: Int,
+        displayRotation: Int
+    ): Float {
+        // Both cameras need 180 degree rotation for external display
+        // This ensures the image appears correctly on external displays
+        // The device and display rotations are currently not used in the calculation
+        // but are kept as parameters for potential future enhancements
+        return 180f
     }
     
     /**
@@ -31,47 +67,14 @@ object CameraRotationHelper {
      * @param displayRotation The external display's rotation
      * @param isFrontCamera Whether the front camera is being used
      * @return The rotation compensation in degrees
+     * @deprecated Use getRotationCompensation(deviceRotation, displayRotation) instead. Camera type no longer affects rotation.
      */
+    @Deprecated("Camera type no longer affects rotation", ReplaceWith("getRotationCompensation(deviceRotation, displayRotation)"))
     fun getRotationCompensation(
         deviceRotation: Int,
         displayRotation: Int,
         isFrontCamera: Boolean
     ): Float {
-        // Calculate base rotation compensation
-        val baseRotation = when (deviceRotation) {
-            Surface.ROTATION_0 -> when (displayRotation) {
-                Surface.ROTATION_0 -> 0f
-                Surface.ROTATION_90 -> 270f
-                Surface.ROTATION_180 -> 180f
-                Surface.ROTATION_270 -> 90f
-                else -> 0f
-            }
-            Surface.ROTATION_90 -> when (displayRotation) {
-                Surface.ROTATION_0 -> 90f
-                Surface.ROTATION_90 -> 0f
-                Surface.ROTATION_180 -> 270f
-                Surface.ROTATION_270 -> 180f
-                else -> 0f
-            }
-            Surface.ROTATION_180 -> when (displayRotation) {
-                Surface.ROTATION_0 -> 180f
-                Surface.ROTATION_90 -> 90f
-                Surface.ROTATION_180 -> 0f
-                Surface.ROTATION_270 -> 270f
-                else -> 0f
-            }
-            Surface.ROTATION_270 -> when (displayRotation) {
-                Surface.ROTATION_0 -> 270f
-                Surface.ROTATION_90 -> 180f
-                Surface.ROTATION_180 -> 90f
-                Surface.ROTATION_270 -> 0f
-                else -> 0f
-            }
-            else -> 0f
-        }
-        
-        // Both cameras need 180 degree rotation for external display
-        // This ensures the image appears correctly on external displays
-        return 180f
+        return getRotationCompensation(deviceRotation, displayRotation)
     }
 }

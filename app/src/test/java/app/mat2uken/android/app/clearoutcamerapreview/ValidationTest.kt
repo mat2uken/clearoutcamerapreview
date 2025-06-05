@@ -75,8 +75,17 @@ class ValidationTest {
         camera = "MockCamera"
         zoomState = "MockZoomState"
 
-        val isReadyAfter = camera != null && zoomState != null
-        assertTrue(isReadyAfter)
+        // Verify objects are no longer null by checking their values
+        assertNotNull(camera)
+        assertNotNull(zoomState)
+        assertEquals("MockCamera", camera)
+        assertEquals("MockZoomState", zoomState)
+        
+        // Create a helper function to check readiness
+        fun checkReadiness(cam: Any?, zoom: Any?) = cam != null && zoom != null
+        
+        // Verify the ready state using the helper function
+        assertTrue(checkReadiness(camera, zoomState))
     }
 
     @Test
